@@ -307,6 +307,17 @@ h1,h2,h3,p{margin:0}
 .pc b{font-family:var(--display);font-weight:500;font-size:38px;line-height:1.1}
 .dstage{margin-top:14px}
 .dstage .mult{font-size:clamp(70px,11vw,130px)}
+.mult.eq{font-size:clamp(54px,9.5vw,122px)}
+.dstage .mult.eq{font-size:clamp(50px,8.5vw,108px)}
+.blank{display:inline-block;min-width:1.05em;text-align:center;color:var(--gold);border-bottom:.08em solid var(--gold);line-height:.95}
+.impl{display:grid;gap:8px;margin-top:10px;max-width:640px}
+.imr{display:grid;grid-template-columns:34px 1fr auto auto;gap:10px;align-items:center;border:1px solid var(--line);border-radius:14px;padding:10px 14px;background:#fff}
+.imr.best{border-color:var(--gold);background:var(--cream)}
+.imr .n{font-family:var(--display);font-weight:800;font-size:24px;color:var(--gold)}
+.imr b{display:block}.imr small{color:var(--muted);font-size:13px}
+.imr strong{font-family:var(--display);font-size:26px;color:var(--ok)}
+.mjseg{max-width:440px;margin-top:8px}
+.wks{display:block;max-width:360px;width:100%;height:auto;margin-top:4px}
 .btn.pa{background:var(--tc);border-color:var(--tc);color:#fff}
 
 /* estadísticas */
@@ -612,14 +623,17 @@ let G=null,TR=null,D=null,confettiDone=false;
 /* operación elegida: mul = multiplicar (tablas), add = sumar, sub = restar, mix = sumar y restar,
    all = todas combinadas (multiplicar con las tablas marcadas, y sumar y restar con «números hasta»).
    Cada pregunta lleva su op: '*' (se guarda sin marca), '+' o '-'. */
-const OPS={mul:['*'],add:['+'],sub:['-'],mix:['+','-'],all:['*','+','-']};
-const usesTables=o=>o==='mul'||o==='all';
-const usesMax=o=>o!=='mul';
-const opSym=o=>o==='+'?'+':o==='-'?'−':'×';
+const OPS={mul:['*'],add:['+'],sub:['-'],mix:['+','-'],all:['*','+','-'],fac:['f'],div:['d'],tab:['*','f','d']};
+/* fac = factor faltante (7 × ? = 56, op 'f'); div = dividir como inversa (56 ÷ 7, op 'd'); tab = tablas completas (×, factor faltante y ÷).
+   En f y d, a es la tabla, b el otro factor y la respuesta es b. */
+const usesTables=o=>o==='mul'||o==='all'||o==='fac'||o==='div'||o==='tab';
+const usesMax=o=>o==='add'||o==='sub'||o==='mix'||o==='all';
+const isTabOp=o=>!o||o==='*'||o==='f'||o==='d';
+const opSym=o=>o==='+'?'+':o==='-'?'−':o==='d'?'÷':'×';
 const opOf=x=>(x&&x.op)||'*';
 const okOp=o=>(OPS[DB.prefs.op]||OPS.mul).includes(o||'*');
-const calc=q=>q.op==='+'?q.a+q.b:q.op==='-'?q.a-q.b:q.a*q.b;
-const qLabel=e=>e.a+' '+opSym(e.op)+' '+e.b;
+const calc=q=>q.op==='+'?q.a+q.b:q.op==='-'?q.a-q.b:(q.op==='f'||q.op==='d')?q.b:q.a*q.b;
+const qLabel=e=>e.op==='f'?e.a+' × ? = '+e.a*e.b:e.op==='d'?(e.a*e.b)+' ÷ '+e.a:e.a+' '+opSym(e.op)+' '+e.b;
 const ckey=e=>opOf(e)==='*'?e.a+'x'+e.b:opOf(e)+e.a+'x'+e.b;
 /* «pasa la decena»: suma cuyas unidades llegan a 10 o más, o resta que necesita prestar */
 const bridges=e=>e.op==='+'?(e.a%10)+(e.b%10)>=10:e.op==='-'?(e.a%10)<(e.b%10):false;
@@ -644,23 +658,25 @@ function pickAS(rec,hard,ops){
 function pickPair(h,tables,lo,hi){
   const rec=h.recent||(h.recent=[]);
   const ops=OPS[DB.prefs.op]||OPS.mul;
-  if(ops.length===1&&ops[0]!=='*')return pickAS(rec,lo!==undefined,ops);
+  let op=ops[0];
   if(ops.length>1){
     /* combinadas: cada pregunta sale de una operación al azar; no se repite la misma tres veces seguidas */
-    let op=ops[rnd(ops.length)];
+    op=ops[rnd(ops.length)];
     if(h.lastOp===op&&h.lastOp2===op)op=ops.filter(x=>x!==op)[rnd(ops.length-1)];
     h.lastOp2=h.lastOp;h.lastOp=op;
-    if(op!=='*')return pickAS(rec,lo!==undefined,[op]);
   }
+  if(op==='+'||op==='-')return pickAS(rec,lo!==undefined,ops.length>1?[op]:ops);
   const A=tables.length?tables:TABLES;
   let a,b,key,tries=0;
-  do{a=A[rnd(A.length)];b=(lo||2)+rnd((hi||12)-(lo||2)+1);key=a+'x'+b;tries++}while(rec.includes(key)&&tries<30);
+  do{a=A[rnd(A.length)];b=(lo||2)+rnd((hi||12)-(lo||2)+1);key=(op==='*'?'':op)+a+'x'+b;tries++}while(rec.includes(key)&&tries<30);
   rec.push(key);if(rec.length>14)rec.shift();
-  return [a,b,'*'];
+  return [a,b,op];
 }
 /* el camino para llegar al resultado (solo cuando ayuda) */
 function hintOf(q){
   const a=q.a,b=q.b,r=calc(q),h=a+' '+opSym(q.op)+' '+b+' → ';
+  if(q.op==='f')return a+' × ? = '+(a*b)+' → piensa: ¿'+a+' por cuánto da '+(a*b)+'? '+a+' × '+b+' = '+(a*b);
+  if(q.op==='d')return (a*b)+' ÷ '+a+' → piensa: ¿'+a+' por cuánto da '+(a*b)+'? '+a+' × '+b+' = '+(a*b)+', así que '+(a*b)+' ÷ '+a+' = '+b;
   if(q.op==='+'){
     if((a%10)+(b%10)>=10){
       const x=(b%10)>(a%10)?b:a,y=x===a?b:a,need=10-(x%10),rest=y-need;
@@ -1110,18 +1126,19 @@ function duelNobody(){if(!D||D.phase==='count')return;timerStop();D.phase='count
 
 /* ================= estadísticas ================= */
 function computeStats(c,fSt){
-  const h=histOf(c),by={},cells={};
+  const h=histOf(c),by={},cells={},heat={};
   studentsOf(c).forEach(n=>{by[n]={n,t:0,b:0,m:0,ms:0}});
   h.forEach(e=>{
     const s=by[e.st]||(by[e.st]={n:e.st,t:0,b:0,m:0,ms:0});
     s.t++;e.ok?s.b++:s.m++;s.ms+=e.ms;
     if(fSt&&e.st!==fSt)return;
     const k=ckey(e);(cells[k]||(cells[k]=[])).push(e);
+    if(isTabOp(e.op)){const hk2=e.a+'x'+e.b;(heat[hk2]||(heat[hk2]=[])).push(e)}
   });
   const all=Object.values(by),done=all.filter(s=>s.t>0).sort((x,y)=>(y.b/y.t-x.b/x.t)||(x.ms/x.t-y.ms/y.t));
   const rest=all.filter(s=>s.t===0);
   const tb=h.filter(e=>e.ok).length,tm=h.length-tb,tms=h.reduce((a,e)=>a+e.ms,0);
-  return {done,rest,cells,tb,tm,n:h.length,tms};
+  return {done,rest,cells,heat,tb,tm,n:h.length,tms};
 }
 function csvText(st){
   const q=s=>'"'+String(s).replace(/"/g,'""')+'"';
@@ -1180,7 +1197,8 @@ const TROPHY='<svg class="tro" viewBox="0 0 24 24" aria-hidden="true"><path d="M
 function viewHall(){
   const c=S.course,hs=hallStats(c),H=hs.H;
   const bar='<div class="hd"><div><p class="eyebrow">'+esc(c.name)+'</p><h1 class="h1m">Salón de campeones</h1></div><div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="btn sm back" data-act="hall-back">← Volver</button><button type="button" class="btn sm" data-act="home">Cambiar curso</button></div></div>';
-  if(!H.length)return '<main class="narrow">'+bar+'<p class="sum">Todavía no hay torneos terminados en este curso. Cuando termine uno, el campeón, el subcampeón y el tercer lugar se guardan aquí solos.</p></main>';
+  const mj=improveList(c,7)[0],mjh=mj&&mj.d>=5?'<div class="imp">'+BI.up+'<div><b>Mayor mejora de la semana: '+esc(mj.n)+'</b><span>Subió '+mj.d+' puntos de aciertos (de '+mj.p+' % a '+mj.r+' %).</span></div></div>':'';
+  if(!H.length)return '<main class="narrow">'+bar+mjh+'<p class="sum">Todavía no hay torneos terminados en este curso. Cuando termine uno, el campeón, el subcampeón y el tercer lugar se guardan aquí solos.</p></main>';
   const med=hs.list.filter(x=>x.g+x.s+x.b>0),oth=hs.list.filter(x=>x.g+x.s+x.b===0);
   let rank=0,prev='';
   const rows=med.map((x,i)=>{
@@ -1189,7 +1207,7 @@ function viewHall(){
   }).join('');
   const nm=(e,k)=>{const l=k==='ch'?e.cn:e.rn,a=(e[k]||[]).map(esc).join(', ');return l?esc(l)+' · '+a:a};
   const recent=H.slice().reverse().slice(0,10).map(e=>'<div class="hr"><b>'+dmy(e.t)+'</b><u>Campeón</u><span>'+nm(e,'ch')+'</span><u>Segundo</u><span>'+nm(e,'ru')+'</span></div>').join('');
-  return '<main class="narrow">'+bar+
+  return '<main class="narrow">'+bar+mjh+
     '<h2 class="h2" style="font-size:30px;margin-top:22px">Top de campeones</h2><p class="hsub" style="font-size:14px">Más torneos ganados arriba; si empatan, cuentan los segundos y terceros lugares. En torneos por equipos, el trofeo es de cada integrante.</p>'+
     (rows||'<p class="hint">Nadie ha llegado al podio todavía.</p>')+
     (oth.length?'<h2 class="h2" style="font-size:26px;margin-top:26px">También han participado</h2><div class="pchips" style="margin-top:8px">'+oth.map(x=>'<span>'+esc(x.n)+' · '+x.p+'</span>').join('')+'</div>':'')+
@@ -1198,6 +1216,38 @@ function viewHall(){
     '<div class="stack" style="margin-top:12px;max-width:360px"><button type="button" class="btn" data-act="hall-clear">'+(S.confirmHall?'¿Seguro? Toca otra vez para borrar el salón':'Borrar el salón de este curso')+'</button></div></main>';
 }
 
+/* ================= mayor mejora ================= */
+/* compara el % de aciertos de los últimos N días con el de los 4N días anteriores; hacen falta 10 respuestas en cada periodo */
+function improveList(c,days){
+  const W=(days||7)*864e5,now=Date.now(),by={};
+  histOf(c).forEach(e=>{
+    const age=now-(e.t||0);const k=age<=W?'r':age<=5*W?'p':null;if(!k)return;
+    const z=by[e.st]||(by[e.st]={r:{t:0,b:0},p:{t:0,b:0}});z[k].t++;if(e.ok)z[k].b++;
+  });
+  return Object.keys(by).map(n=>{
+    const z=by[n];if(z.r.t<10||z.p.t<10)return null;
+    const r=Math.round(z.r.b/z.r.t*100),p=Math.round(z.p.b/z.p.t*100);
+    return {n,r,p,d:r-p,tr:z.r.t};
+  }).filter(x=>x&&x.d>0).sort((x,y)=>y.d-x.d||y.r-x.r||y.tr-x.tr||(x.n<y.n?-1:1));
+}
+function impHtml(c){
+  const days=S.impDays||7,l=improveList(c,days),lab={7:'Semana',14:'2 semanas',30:'Mes'};
+  let h='<h2 class="h2" style="font-size:30px;margin-top:26px">Mayor mejora</h2><p class="hsub" style="font-size:14px">Premia a quien más sube, no solo a quien ya sabe. Compara los aciertos de los últimos '+days+' días con los '+(4*days)+' días anteriores; hacen falta 10 respuestas o más en cada periodo.</p>';
+  h+='<div class="segs mjseg" role="group" aria-label="Periodo">'+[7,14,30].map(v=>'<button type="button" class="seg sm '+(days===v?'on':'')+'" data-act="imp" data-v="'+v+'" aria-pressed="'+(days===v)+'">'+lab[v]+'</button>').join('')+'</div>';
+  if(!l.length)return h+'<p class="hsub" style="font-size:14px;margin-top:10px">Todavía no hay datos suficientes para comparar, o nadie subió en este periodo.</p>';
+  return h+'<div class="impl">'+l.slice(0,5).map((x,i)=>'<div class="imr'+(i===0&&x.d>=5?' best':'')+'"><span class="n">'+(i+1)+'</span><div><b>'+esc(x.n)+'</b><small>de '+x.p+' % a '+x.r+' % de aciertos</small></div><strong>+'+x.d+'</strong><small>puntos</small></div>').join('')+'</div>';
+}
+function weeksSvg(ws){
+  const W=360,bw=40,gap=(W-6*bw)/7;
+  let s='<svg class="wks" viewBox="0 0 '+W+' 92" role="img" aria-label="Porcentaje de aciertos por semana">';
+  ws.forEach((w,i)=>{
+    const x=gap+i*(bw+gap),ok=w.t>=5,hh=ok?Math.max(2,Math.round(w.p*.56)):2,y=62-hh;
+    s+='<rect x="'+x.toFixed(1)+'" y="'+y+'" width="'+bw+'" height="'+hh+'" rx="4" fill="'+(ok?'#9a6b08':'#d9d3cb')+'"/>';
+    if(ok)s+='<text x="'+(x+bw/2).toFixed(1)+'" y="'+(y-4)+'" text-anchor="middle" font-size="11" font-weight="700" fill="#1a1814">'+w.p+' %</text>';
+    s+='<text x="'+(x+bw/2).toFixed(1)+'" y="78" text-anchor="middle" font-size="10" fill="#665f54">'+(i===5?'Esta sem.':'Hace '+(5-i))+'</text>';
+  });
+  return s+'</svg>';
+}
 /* ================= insignias ================= */
 const BI={
   star:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5l2.9 6 6.6.9-4.8 4.6 1.2 6.5L12 17.4l-5.9 3.1 1.2-6.5L2.5 9.4l6.6-.9z" fill="currentColor"/></svg>',
@@ -1214,7 +1264,7 @@ function badgesFor(c){
   const dkey=t=>{const d=new Date(t);return d.getFullYear()*10000+(d.getMonth()+1)*100+d.getDate()};
   Object.keys(by).forEach(n=>{
     const a=by[n],b=[],tb={};
-    a.forEach(e=>{if(opOf(e)!=='*')return;const o=tb[e.a]||(tb[e.a]={t:0,b:0});o.t++;if(e.ok)o.b++});
+    a.forEach(e=>{if(!isTabOp(e.op))return;const o=tb[e.a]||(tb[e.a]={t:0,b:0});o.t++;if(e.ok)o.b++});
     const ms=Object.keys(tb).map(Number).filter(k=>tb[k].t>=12&&tb[k].b/tb[k].t>=.9).sort((x,y)=>x-y);
     if(ms.length)b.push({k:'maestro',ico:'star',t:'Maestro del '+lst(ms),d:'12 respuestas o más en esa tabla con 90 % o más de aciertos'});
     let cur=0,mx=0;a.forEach(e=>{if(e.ok){cur++;if(cur>mx)mx=cur}else cur=0});
@@ -1231,7 +1281,7 @@ function badgesFor(c){
     res[n]=b;
   });
   Object.keys(hs).forEach(n=>{if(!res[n]){const tg=trophyBadge(hs[n]);res[n]=tg?[tg]:[]}});
-  if(imp){const m=imp;(res[m.n]=res[m.n]||[]).unshift({k:'mej',ico:'up',t:'Más mejorado de la semana',d:'Subió '+Math.round(m.d*100)+' puntos de aciertos frente a las 4 semanas anteriores'})}
+  if(imp){const m=imp;(res[m.n]=res[m.n]||[]).unshift({k:'mej',ico:'up',t:'Mayor mejora de la semana',d:'Subió '+Math.round(m.d*100)+' puntos de aciertos frente a las 4 semanas anteriores'})}
   return {by:res,imp};
 }
 const bdgHtml=l=>l&&l.length?'<div class="bdgs">'+l.map(b=>'<span class="bdg" title="'+esc(b.d)+'">'+BI[b.ico]+esc(b.t)+'</span>').join('')+'</div>':'';
@@ -1239,7 +1289,6 @@ function badgesHtml(c,B){
   B=B||badgesFor(c);
   const n=Object.keys(B.by).filter(k=>B.by[k].length).length;
   let h='<h2 class="h2" style="font-size:30px;margin-top:26px">Insignias</h2>';
-  if(B.imp)h+='<div class="imp">'+BI.up+'<div><b>Más mejorado de la semana: '+esc(B.imp.n)+'</b><span>Subió '+Math.round(B.imp.d*100)+' puntos de aciertos frente a las 4 semanas anteriores.</span></div></div>';
   return h+'<p class="hsub" style="font-size:14px;margin-top:8px">'+(n?n+(n===1?' estudiante tiene insignias':' estudiantes tienen insignias')+'; aparecen debajo de cada nombre en el ranking. ':'Todavía nadie tiene insignias. ')+'Se ganan así: «Maestro del N» (12 respuestas o más de esa tabla con 90 % de aciertos), «Racha» (10 o más correctas seguidas), «Relámpago» (20 respuestas o más, promedio de 4 s o menos y 80 % de aciertos), «Constante» (10 días distintos) y las de torneo.</p>';
 }
 function heatCtl(c){
@@ -1251,13 +1300,14 @@ function heatCtl(c){
 function reportData(c,n){
   const a=histOf(c).filter(e=>e.st===n),t=a.length,b=a.filter(e=>e.ok).length;
   const o={n,t,b,pct:t?Math.round(b/t*100):0,avg:t?a.reduce((z,e)=>z+e.ms,0)/t/1000:0,ops:{},strong:[],weak:[],trend:null};
-  ['*','+','-'].forEach(op=>{const x=a.filter(e=>opOf(e)===op);if(x.length)o.ops[op]={t:x.length,pct:Math.round(x.filter(e=>e.ok).length/x.length*100),avg:x.reduce((z,e)=>z+e.ms,0)/x.length/1000}});
-  const tb={};a.forEach(e=>{if(opOf(e)!=='*')return;const z=tb[e.a]||(tb[e.a]={t:0,b:0});z.t++;if(e.ok)z.b++});
+  ['*','f','d','+','-'].forEach(op=>{const x=a.filter(e=>opOf(e)===op);if(x.length)o.ops[op]={t:x.length,pct:Math.round(x.filter(e=>e.ok).length/x.length*100),avg:x.reduce((z,e)=>z+e.ms,0)/x.length/1000}});
+  const tb={};a.forEach(e=>{if(!isTabOp(e.op))return;const z=tb[e.a]||(tb[e.a]={t:0,b:0});z.t++;if(e.ok)z.b++});
   o.strong=Object.keys(tb).map(Number).filter(k=>tb[k].t>=6&&tb[k].b/tb[k].t>=.9).sort((x,y)=>tb[y].b/tb[y].t-tb[x].b/tb[x].t||tb[y].t-tb[x].t||x-y).slice(0,4);
   const cells={};a.forEach(e=>{const k=ckey(e),z=cells[k]||(cells[k]={e,bad:0,n:0,ms:0});z.n++;if(!e.ok)z.bad++;z.ms+=e.ms});
   o.weak=Object.values(cells).filter(x=>x.bad>0).sort((x,y)=>y.bad-x.bad||y.ms/y.n-x.ms/x.n).slice(0,6).map(x=>({lab:qLabel(x.e),bad:x.bad}));
   const now=Date.now(),W=7*864e5,r=a.filter(e=>e.t>now-W),pv=a.filter(e=>e.t<=now-W&&e.t>now-5*W);
   if(r.length>=10&&pv.length>=10)o.trend={r:Math.round(r.filter(e=>e.ok).length/r.length*100),p:Math.round(pv.filter(e=>e.ok).length/pv.length*100)};
+  o.weeks=[];for(let i=5;i>=0;i--){const x=a.filter(e=>e.t>now-(i+1)*W&&e.t<=now-i*W);o.weeks.push({t:x.length,p:x.length?Math.round(x.filter(e=>e.ok).length/x.length*100):0})}
   return o;
 }
 /* resumen en un solo párrafo, para pegar en un mensaje */
@@ -1272,7 +1322,7 @@ function sumText(c,n){
   return s;
 }
 function reportHtml(c,n,bl,hs){
-  const r=reportData(c,n),opn={'*':'Multiplicar','+':'Sumar','-':'Restar'};
+  const r=reportData(c,n),opn={'*':'Multiplicar','f':'Factor faltante','d':'Dividir','+':'Sumar','-':'Restar'};
   let h='<section class="rpt"><div class="rhd"><p class="eyebrow">Prof. Lewys Mármol · Matemática · '+esc(c.name)+'</p><h2 class="rn">'+esc(n)+'</h2><p class="hsub">Informe de práctica · Lemates2.71 · '+dmy(Date.now())+'</p></div>';
   if(!r.t)return h+'<p class="hint">Todavía no tiene respuestas registradas.</p></section>';
   h+='<div class="kp"><div><b>'+r.t+'</b><small>respuestas</small></div><div><b>'+r.pct+' %</b><small>de aciertos</small></div><div><b>'+one(r.avg)+' s</b><small>promedio</small></div></div>';
@@ -1281,6 +1331,7 @@ function reportHtml(c,n,bl,hs){
   h+='<h3>Va bien en</h3>'+(r.strong.length?'<div class="ch">'+r.strong.map(k=>'<span>Tabla del '+k+'</span>').join('')+'</div>':'<p class="hint">Todavía no hay una tabla con suficientes respuestas y 90 % de aciertos.</p>');
   h+='<h3>Para reforzar</h3>'+(r.weak.length?'<div class="ch">'+r.weak.map(x=>'<span class="bd">'+esc(x.lab)+' · '+x.bad+(x.bad>1?' fallos':' fallo')+'</span>').join('')+'</div>':'<p class="hint">No tiene fallos registrados.</p>');
   if(r.trend)h+='<h3>Progreso</h3><p>Última semana: <b>'+r.trend.r+' %</b> de aciertos. Las 4 semanas anteriores: '+r.trend.p+' %.</p>';
+  if(r.weeks&&r.weeks.filter(w=>w.t>=5).length>=2)h+='<h3>Aciertos por semana</h3>'+weeksSvg(r.weeks);
   if(bl&&bl.length)h+='<h3>Insignias</h3>'+bdgHtml(bl);
   if(hs&&(hs.g||hs.s||hs.b))h+='<h3>Torneos</h3><p>'+hs.p+(hs.p===1?' torneo jugado':' torneos jugados')+' · '+hs.g+' ganados · '+hs.s+' en segundo lugar · '+hs.b+' en tercero.</p>';
   return h+'<p class="ft">Generado con Lemates2.71 a partir de las respuestas registradas en clase.</p></section>';
@@ -1542,9 +1593,9 @@ function viewSetup(){
   if(saved)h+='<div class="saved"><span>Hay un torneo guardado de este curso.</span><div><button type="button" class="btn sm gold" data-act="resume-tour">Seguir</button><button type="button" class="btn sm" data-act="discard-tour">Descartar</button></div></div>';
   h+='<div class="tools"><button type="button" class="btn sm" data-act="stats-setup">Estadísticas</button><button type="button" class="btn sm" data-act="hall">Salón de campeones</button></div>'+absHtml(c);
   const opm=DB.prefs.op||'mul';
-  h+='<div class="sec"><span class="lab">Operación</span></div><div class="ops">'+[['mul','Multiplicar'],['add','Sumar'],['sub','Restar'],['mix','Sumar y restar'],['all','Todas combinadas']].map(o=>'<button type="button" class="seg '+(o[0]==='all'?'all ':'')+(opm===o[0]?'on':'')+'" data-act="op" data-v="'+o[0]+'" aria-pressed="'+(opm===o[0])+'">'+o[1]+'</button>').join('')+'</div>';
+  h+='<div class="sec"><span class="lab">Operación</span></div><div class="ops">'+[['mul','Multiplicar'],['fac','Factor faltante'],['div','Dividir'],['tab','Tablas completas'],['add','Sumar'],['sub','Restar'],['mix','Sumar y restar'],['all','Todas combinadas']].map(o=>'<button type="button" class="seg '+(opm===o[0]?'on':'')+'" data-act="op" data-v="'+o[0]+'" aria-pressed="'+(opm===o[0])+'">'+o[1]+'</button>').join('')+'</div>';
   if(usesTables(opm))h+='<div class="sec"><span class="lab">Tablas</span><div style="display:flex;gap:6px"><button type="button" class="btn sm" data-act="tbl-all">Todas</button><button type="button" class="btn sm" data-act="tbl-none">Ninguna</button></div></div><div class="chips">'+
-    TABLES.map(n=>'<button type="button" class="chip '+(tabs.includes(n)?'on':'')+'" data-act="tbl" data-n="'+n+'" aria-pressed="'+tabs.includes(n)+'">'+n+'</button>').join('')+'</div>'+(opm==='all'?'<p class="hint">Las tablas marcadas son para multiplicar.</p>':'');
+    TABLES.map(n=>'<button type="button" class="chip '+(tabs.includes(n)?'on':'')+'" data-act="tbl" data-n="'+n+'" aria-pressed="'+tabs.includes(n)+'">'+n+'</button>').join('')+'</div>'+(opm==='all'?'<p class="hint">Las tablas marcadas son para multiplicar.</p>':opm==='fac'?'<p class="hint">Se muestra la multiplicación con un número escondido: 7 × ? = 56. La respuesta es el número que falta.</p>':opm==='div'?'<p class="hint">División como lo contrario de multiplicar: 56 ÷ 7 = ?. Siempre es exacta y usa las tablas marcadas.</p>':opm==='tab'?'<p class="hint">Mezcla, con las tablas marcadas: multiplicar (7 × 8), factor faltante (7 × ? = 56) y dividir (56 ÷ 7).</p>':'');
   if(usesMax(opm))h+='<div class="sec"><span class="lab">Números hasta</span></div><div class="segs">'+[10,15,20].map(v=>'<button type="button" class="seg '+(DB.prefs.max===v?'on':'')+'" data-act="max" data-v="'+v+'" aria-pressed="'+(DB.prefs.max===v)+'">'+v+'</button>').join('')+'</div><p class="hint">'+(opm==='all'?'Para las sumas y restas: números del 2 al '+DB.prefs.max+'. ':'Números del 2 al '+DB.prefs.max+'. ')+'En las restas, el resultado nunca es 0 ni 1. Salen más seguido las que pasan la decena (8 + 7, 15 − 8), que son las difíciles.</p>';
   h+='<div class="modes">'+[['individual','Individual'],['teams','Equipos'],['tour','Torneo']].map(m=>'<button type="button" class="mode '+(cf.mode===m[0]?'on':'')+'" data-act="mode" data-m="'+m[0]+'">'+m[1]+'</button>').join('')+'</div>';
   h+='<div class="sec"><span class="lab">Segundos por pregunta</span></div><div class="segs">'+[10,15,30].map(s=>'<button type="button" class="seg '+(DB.prefs.secs===s?'on':'')+'" data-act="secs" data-s="'+s+'">'+s+'s</button>').join('')+'</div>';
@@ -1577,7 +1628,13 @@ function histHtml(){
   (h.length?h.map(e=>'<div class="he"><small>'+esc(e.st)+'</small><div><span class="hm">'+qLabel(e)+'</span><span class="hr '+(e.ok?'ok':'bad')+'">'+(e.ok?'Bien':'Mal')+'</span></div></div>').join(''):'<p class="hsub">Cuando marques Bien o Mal, queda anotado aquí.</p>')+
   '</div><button type="button" class="btn sm block" data-act="reset-hist"'+(all.length?'':' disabled')+'>'+(S.confirmReset?'¿Seguro? Toca otra vez':'Reiniciar historial')+'</button>';
 }
-const multHtml=q=>'<div class="mult"><span>'+q.a+'</span><i>'+opSym(q.op)+'</i><span>'+q.b+'</span></div>';
+const blank='<span class="blank" aria-label="número que falta">?</span>';
+const swp=q=>q.op==='f'&&((q.a+q.b)&1)===1;
+const multHtml=q=>{
+  if(q.op==='f')return '<div class="mult eq">'+(swp(q)?blank+'<i>×</i><span>'+q.a+'</span>':'<span>'+q.a+'</span><i>×</i>'+blank)+'<i>=</i><span>'+(q.a*q.b)+'</span></div>';
+  if(q.op==='d')return '<div class="mult eq"><span>'+(q.a*q.b)+'</span><i>÷</i><span>'+q.a+'</span><i>=</i>'+blank+'</div>';
+  return '<div class="mult"><span>'+q.a+'</span><i>'+opSym(q.op)+'</i><span>'+q.b+'</span></div>';
+};
 const timerBox=lbl=>'<div class="tbox"><div class="tlbl">'+lbl+'</div><div class="tnum" id="tnum">'+secLeft()+'</div><div class="tbar"><b id="tbar" style="width:'+(T.total?T.left/T.total*100:100)+'%"></b></div></div>';
 const resBox=q=>{const hn=hintOf(q);return '<div class="rbox"><div class="tlbl">Resultado</div><div class="rnum">'+calc(q)+'</div>'+(hn?'<div class="how"><span>Cómo se hace</span>'+hn+'</div>':'')+'</div>'};
 function stageInd(){
@@ -1642,17 +1699,18 @@ function viewStats(){
     h+='<span class="hh">'+a+'</span>';
     TABLES.forEach(b=>{
       const k=a+'x'+b,sel=S.sel&&S.sel[0]===a&&S.sel[1]===b;
-      h+='<button type="button" class="hc'+(sel?' sel':'')+'" style="'+cellColor(st.cells[k])+'" data-act="cell" data-a="'+a+'" data-b="'+b+'" aria-label="'+a+' por '+b+'">'+(a*b)+'</button>';
+      h+='<button type="button" class="hc'+(sel?' sel':'')+'" style="'+cellColor(st.heat[k])+'" data-act="cell" data-a="'+a+'" data-b="'+b+'" aria-label="'+a+' por '+b+'">'+(a*b)+'</button>';
     });
   });
   h+='</div>';
   if(S.sel){
-    const arr=st.cells[S.sel[0]+'x'+S.sel[1]];
-    h+='<div class="detail"><h3>'+S.sel[0]+' × '+S.sel[1]+'</h3>'+(arr?arr.slice().reverse().slice(0,12).map(e=>'<div><span>'+esc(e.st)+'</span><span class="'+(e.ok?'':'')+'" style="color:var(--'+(e.ok?'ok':'bad')+');font-weight:600">'+(e.ok?'Bien':'Mal')+' · '+one(e.ms/1000)+' s</span></div>').join(''):'<p class="hsub">Todavía nadie ha practicado esta multiplicación.</p>')+'</div>';
+    const arr=st.heat[S.sel[0]+'x'+S.sel[1]];
+    h+='<div class="detail"><h3>'+S.sel[0]+' × '+S.sel[1]+'</h3>'+(arr?arr.slice().reverse().slice(0,12).map(e=>'<div><span>'+esc(e.st)+'</span><span class="'+(e.ok?'':'')+'" style="color:var(--'+(e.ok?'ok':'bad')+');font-weight:600">'+(e.ok?'Bien':'Mal')+' · '+one(e.ms/1000)+' s'+(e.op==='f'?' · factor faltante':e.op==='d'?' · dividir':'')+'</span></div>').join(''):'<p class="hsub">Todavía nadie ha practicado esta multiplicación.</p>')+'</div>';
   }
   const miss=Object.keys(st.cells).map(k=>{const arr=st.cells[k];return {k,e:arr[0],bad:arr.filter(e=>!e.ok).length,ms:arr.reduce((a,e)=>a+e.ms,0)/arr.length}}).filter(x=>x.bad>0).sort((x,y)=>y.bad-x.bad||y.ms-x.ms).slice(0,6);
   h+='<h2 class="h2" style="font-size:30px;margin-top:26px">Para reforzar</h2>'+(miss.length?'<div class="fix">'+miss.map(x=>'<span>'+qLabel(x.e)+' · '+x.bad+(x.bad>1?' fallos':' fallo')+'</span>').join('')+'</div>':'<p class="hsub" style="font-size:14px;margin-top:6px">Todavía no hay fallos registrados.</p>');
   h+=asHtml(c);
+  h+=impHtml(c);
   h+=badgesHtml(c,BD);
   h+='<div style="margin-top:22px">'+st.done.map((s,i)=>'<div class="rk"><span class="n">'+(i+1)+'</span><div><div style="font-weight:600">'+esc(s.n)+'</div><div class="sm2">'+Math.round(s.b/s.t*100)+'% de aciertos · Promedio '+one(s.ms/s.t/1000)+' s · Total '+Math.round(s.ms/1000)+' s</div></div><div class="c"><b class="g">'+s.b+'</b><small class="g">bien</small><b class="rd">'+s.m+'</b><small class="rd">mal</small></div><div class="rkx">'+rowx(s.n)+'</div></div>').join('')+
   st.rest.map(s=>'<div class="rk"><span class="n">—</span><div><div style="font-weight:600">'+esc(s.n)+'</div><div class="sm2">Sin tiempo todavía</div></div><div class="c"><b class="g">0</b><small class="g">bien</small><b class="rd">0</b><small class="rd">mal</small></div></div>').join('')+'</div></div>';
@@ -1881,6 +1939,7 @@ function act(a,d){
     case 'tmode':S.cfg.tmode=d.m;S.teams=null;render();break;
     case 'secs':DB.prefs.secs=+d.s;save();render();break;
     case 'op':DB.prefs.op=d.v;save();render();break;
+    case 'imp':S.impDays=+d.v||7;render();break;
     case 'max':DB.prefs.max=+d.v;save();render();break;
     case 'best':S.cfg[d.k]=+d.v;render();break;
     case 'teamsN':S.cfg.teamsN=+d.n;if(S.teams)S.teams=dealAuto(S.cfg.teamsN,list);render();break;
