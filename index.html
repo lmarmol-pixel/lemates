@@ -954,7 +954,7 @@ function nextMatch(){
 function mTitle(m){
   if(m.br==='T')return 'Tercer lugar';
   if(m.br==='G')return m.r===0?'Gran final':'Gran final · desempate';
-  if(m.br==='L')return m.r===TR.Lc?'Final de perdedores':'Perdedores · ronda '+m.r;
+  if(m.br==='L')return m.r===TR.Lc?'Final de no ganadores':'No ganadores · ronda '+m.r;
   if(TR.dbl&&m.r===TR.k-1)return 'Final principal';
   return RN[TR.P>>(m.r+1)]||'Ronda';
 }
@@ -1551,10 +1551,10 @@ function viewSetup(){
   if(cf.mode==='tour'){
     h+='<div class="two" style="margin-top:14px"><button type="button" class="seg '+(cf.tmode==='students'?'on':'')+'" data-act="tmode" data-m="students">Estudiantes</button><button type="button" class="seg '+(cf.tmode==='teams'?'on':'')+'" data-act="tmode" data-m="teams">Equipos</button></div>';
     const grp=(k,lab)=>'<div><span class="lab">'+lab+'</span><div class="segs" style="margin-top:6px">'+[3,5,7].map(v=>'<button type="button" class="seg sm '+(cf[k]===v?'on':'')+'" data-act="best" data-k="'+k+'" data-v="'+v+'">'+v+'</button>').join('')+'</div></div>';
-    h+='<div style="margin-top:16px"><span class="lab">Ronda de perdedores</span><div class="two" style="margin-top:6px"><button type="button" class="seg '+(cf.losers?'on':'')+'" data-act="losers" data-v="1">Sí</button><button type="button" class="seg '+(!cf.losers?'on':'')+'" data-act="losers" data-v="0">No</button></div></div>';
-    h+='<p class="hint">'+(cf.losers?'Doble eliminación: quien pierde sigue jugando en el cuadro de perdedores y sale con la segunda derrota. En la gran final, si gana quien viene de perdedores, se juega un desempate.':'Eliminación simple: quien pierde sale del torneo.')+'</p>';
+    h+='<div style="margin-top:16px"><span class="lab">Ronda de no ganadores</span><div class="two" style="margin-top:6px"><button type="button" class="seg '+(cf.losers?'on':'')+'" data-act="losers" data-v="1">Sí</button><button type="button" class="seg '+(!cf.losers?'on':'')+'" data-act="losers" data-v="0">No</button></div></div>';
+    h+='<p class="hint">'+(cf.losers?'Doble eliminación: quien pierde sigue jugando en la ronda de no ganadores y sale con la segunda derrota. En la gran final, si gana quien viene de la ronda de no ganadores, se juega un desempate.':'Eliminación simple: quien pierde sale del torneo.')+'</p>';
     h+='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:16px">'+grp('first','Primeras')+grp('semi','Semifinal')+grp('final','Final')+'</div>';
-    h+='<p class="hint">Cada número es «al mejor de»: 3 es primero a 2, 5 primero a 3 y 7 primero a 4.'+(cf.losers?' «Semifinal» vale para la final del cuadro principal y la final de perdedores; «Final», para la gran final.':'')+'</p>';
+    h+='<p class="hint">Cada número es «al mejor de»: 3 es primero a 2, 5 primero a 3 y 7 primero a 4.'+(cf.losers?' «Semifinal» vale para la final del cuadro principal y la final de no ganadores; «Final», para la gran final.':'')+'</p>';
     if(cf.tmode==='teams')h+=teamSetupHtml(Math.min(4,list.length),list);
     h+='<p class="rules">Duelo uno contra uno con la misma '+(opm==='mul'?'multiplicación':'operación')+'. Quien conteste bien primero se lleva el punto. Si algo sale mal, en el duelo puede quitar un punto y en el cuadro puede repetir un duelo.</p>';
   }
@@ -1670,8 +1670,8 @@ function srcOf(m,side){
 function pendTxt(m,side){
   const s=srcOf(m,side);
   if(!s)return 'Por definirse';
-  if(m.br==='G')return side==='a'?'Gana el cuadro principal':'Gana perdedores';
-  if(s.t==='l')return 'Perdedor de '+mTitle(s.x);
+  if(m.br==='G')return side==='a'?'Gana el cuadro principal':'Gana la ronda de no ganadores';
+  if(s.t==='l')return 'No ganador de '+mTitle(s.x);
   return 'Por definirse';
 }
 const CROWN='<svg class="crown" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 8l4.5 4L12 5l4.5 7L21 8l-2 11H5L3 8z" fill="currentColor"/></svg>';
@@ -1690,7 +1690,7 @@ function repBtn(m){
 const playBtn=cls=>S.fromDuel?'<button type="button" class="'+cls+'" data-act="back-duel">Volver al duelo</button>':'<button type="button" class="'+cls+'" data-act="duel-play">Jugar duelo</button>';
 function epicCard(m,cur,tag){
   const head='<div class="eh">'+CROWN+'<span>'+tag+'</span></div>';
-  if(m.br==='G'&&m.off)return '<div class="epw"><div class="epic gf off"><div class="epic-in">'+head+'<p class="eoff">Solo si gana quien viene de perdedores</p></div></div></div>';
+  if(m.br==='G'&&m.off)return '<div class="epw"><div class="epic gf off"><div class="epic-in">'+head+'<p class="eoff">Solo si gana quien viene de la ronda de no ganadores</p></div></div></div>';
   const side=(e,sc,k)=>{
     if(!isEnt(e))return '<div class="ep pend" style="--tc:#3a4577"><span class="en">'+(e==='x'?'Pasa directo':pendTxt(m,k))+'</span><b class="es">–</b></div>';
     const w=m.w===k;
@@ -1754,7 +1754,7 @@ function bracketHtml(){
   if(TR.dbl)h+='<h2 class="bkh">Cuadro principal</h2>';
   h+=tree('W',TR.third!==null?TR.third:0);
   if(TR.dbl){
-    h+='<h2 class="bkh">Ronda de perdedores</h2>'+tree('L',0);
+    h+='<h2 class="bkh">Ronda de no ganadores</h2>'+tree('L',0);
     h+='<h2 class="bkh">Gran final</h2><div class="gfs">'+matchCard(M[TR.g1],cur===TR.g1)+matchCard(M[TR.g2],cur===TR.g2)+'</div>';
   }
   return h;
@@ -1768,7 +1768,7 @@ function viewBracket(){
     pod='<section class="pod" aria-label="Podio">'+(NAVIDAD?'<div class="nvstrip" aria-hidden="true"></div>':'')+'<div class="pdh"><span aria-hidden="true">✦</span>Podio<span aria-hidden="true">✦</span></div><div class="pds'+(t3?'':' two')+'">'+col(1,'Campeón',ch.e,1.05)+col(2,'Subcampeón',ru.e,.55)+(t3?col(3,'Tercer lugar',t3.e,.1):'')+'</div></section>';
   }
   const btn=done?'<div class="goto top"><button type="button" class="btn gold xl" data-act="to-setup">Nuevo torneo</button><button type="button" class="btn xl" data-act="hall">Salón de campeones</button></div>':'';
-  const tag=!done&&M[cur].br==='L'?' · ronda de perdedores':'';
+  const tag=!done&&M[cur].br==='L'?' · ronda de no ganadores':'';
   return '<div class="tourp"><div class="top3"><div><p class="eyebrow">Torneo'+tag+'</p><h1 class="h1m" style="margin-bottom:12px">'+(done?'Cuadro':mTitle(M[cur]))+'</h1></div><div class="r"><button type="button" class="btn sm back" data-act="bracket-back">'+(S.fromDuel?'← Volver al duelo':'← Volver')+'</button><button type="button" class="btn sm" data-act="mute">'+(DB.prefs.mute?'Activar sonido':'Silencio')+'</button>'+(done?'':'<button type="button" class="btn sm" data-act="save-exit">Guardar y salir</button>')+'<button type="button" class="btn sm" data-act="home">Cambiar curso</button></div></div>'+pod+(done?placesHtml():'')+btn+bracketHtml()+'</div>';
 }
 const pcard=(e,side,sc)=>'<div class="pc" style="--tc:'+ecol(e,side)+'"><div><small>'+esc(e.n)+'</small><b>'+sc+'</b></div><button type="button" class="btn sm minus" data-act="minus" data-side="'+side+'"'+(sc>0?'':' disabled')+' aria-label="Quitar un punto a '+esc(e.n)+'">−1</button></div>';
@@ -1782,7 +1782,7 @@ function viewDuel(){
     else st+='<div class="tbox"><div class="tnum" id="tnum">'+secLeft()+'</div><div class="tbar"><b id="tbar" style="width:'+(T.total?T.left/T.total*100:100)+'%"></b></div></div>';
     st+='<div class="btns" style="margin-top:22px"><div class="g2"><button type="button" class="btn big pa" style="--tc:'+ecol(A,'a')+'" data-act="pa">'+esc(A.n)+'</button><button type="button" class="btn big pa" style="--tc:'+ecol(B,'b')+'" data-act="pb">'+esc(B.n)+'</button></div><div class="g2"><button type="button" class="btn" data-act="pnone">Nadie</button>'+(D.phase==='reveal'?'<button type="button" class="btn" data-act="pnone">Otra pregunta</button>':'<button type="button" class="btn" data-act="dreveal">Mostrar respuesta</button>')+'</div>'+(D.phase!=='reveal'?'<button type="button" class="btn block" data-act="dpause">'+(D.phase==='paused'?'Continuar':'Pausar')+'</button>':'')+'</div><button type="button" class="linkbtn" data-act="view-bracket" style="margin-top:10px">Ver cuadro</button><p class="keys">Atajos: 1 y 2 dan el punto · 0 nadie · R respuesta · P pausa</p>';
   }
-  return '<div class="tourp"><div class="top3"><div><p class="eyebrow">Torneo'+(m.br==='L'?' · ronda de perdedores':'')+'</p><h1 class="h1m" style="margin-bottom:0">'+mTitle(m)+'</h1></div><div class="r"><button type="button" class="btn sm back" data-act="view-bracket"'+(D.phase==='count'?' disabled':'')+'>← Volver</button><button type="button" class="btn sm" data-act="mute">'+(DB.prefs.mute?'Activar sonido':'Silencio')+'</button><button type="button" class="btn sm" data-act="save-exit">Guardar y salir</button><button type="button" class="btn sm" data-act="home">Cambiar curso</button></div></div>'+
+  return '<div class="tourp"><div class="top3"><div><p class="eyebrow">Torneo'+(m.br==='L'?' · ronda de no ganadores':'')+'</p><h1 class="h1m" style="margin-bottom:0">'+mTitle(m)+'</h1></div><div class="r"><button type="button" class="btn sm back" data-act="view-bracket"'+(D.phase==='count'?' disabled':'')+'>← Volver</button><button type="button" class="btn sm" data-act="mute">'+(DB.prefs.mute?'Activar sonido':'Silencio')+'</button><button type="button" class="btn sm" data-act="save-exit">Guardar y salir</button><button type="button" class="btn sm" data-act="home">Cambiar curso</button></div></div>'+
   '<main class="duel"><p class="rule">Al mejor de '+D.best+' · primero a '+D.ft+'</p><div class="pl2">'+pcard(A,'a',m.sa)+pcard(B,'b',m.sb)+'</div><div class="dstage">'+st+'</div></main></div>';
 }
 
