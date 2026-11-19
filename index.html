@@ -398,6 +398,8 @@ h1,h2,h3,p{margin:0}
 .achip.off{background:#fbeeed;border-color:var(--bad);color:var(--bad);text-decoration:line-through}
 .tlv{font-size:13px;color:var(--muted);margin:0 0 6px}
 .foot{text-align:center;margin:18px 0 0}
+.gbox{border:1px solid var(--line);border-radius:16px;padding:16px 18px;margin:16px 0 8px;background:var(--paper)}
+.gbox .sum{margin-top:8px}
 .hl{display:grid;grid-template-columns:52px 1fr auto;align-items:center;gap:10px;border:1px solid var(--line);border-radius:14px;padding:10px 16px;margin-top:8px}
 .hl.hi{border-color:var(--gold)}
 .hl .pn{font-family:var(--display);font-size:24px;color:var(--muted)}.hl.hi .pn{color:var(--gold)}
@@ -476,7 +478,7 @@ let DB={};
 try{DB=JSON.parse(localStorage.getItem(KEY)||'{}')||{}}catch(e){DB={}}
 DB.libre=DB.libre||'';DB.classes=DB.classes||{};DB.hist=DB.hist||{};DB.rep=DB.rep||{};DB.tour=DB.tour||{};DB.abs=DB.abs||{};DB.hall=DB.hall||{};
 DB.prefs=Object.assign({mute:false,tables:TABLES.slice(),secs:15,op:'mul',max:20},DB.prefs||{});
-const save=()=>{try{const o=Object.assign({},DB);o.classes={};Object.keys(DB.classes).forEach(k=>{const c=DB.classes[k];o.classes[k]=c&&c.enc?Object.assign({},c,{names:[]}):c});localStorage.setItem(KEY,JSON.stringify(o))}catch(e){}};
+const save=()=>{try{DB.mt=Date.now();const o=Object.assign({},DB);o.classes={};Object.keys(DB.classes).forEach(k=>{const c=DB.classes[k];o.classes[k]=c&&c.enc?Object.assign({},c,{names:[]}):c});localStorage.setItem(KEY,JSON.stringify(o))}catch(e){}try{gSoon()}catch(e){}};
 function parseNames(t){const seen=new Set(),out=[];String(t||'').split(/\r?\n/).forEach(l=>{const n=l.replace(/\s+/g,' ').trim();if(!n)return;const k=n.toLowerCase();if(seen.has(k))return;seen.add(k);out.push(n)});return out.slice(0,200)}
 async function sha(s){try{const d=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s));return Array.from(new Uint8Array(d)).map(x=>x.toString(16).padStart(2,'0')).join('')}catch(e){let h=0;for(const c of s)h=(h*31+c.charCodeAt(0))|0;return 'x'+h}}
 
@@ -1324,13 +1326,152 @@ function applyBackup(db){
   save();
 }
 function viewBackup(){
-  return '<main class="narrow"><div class="hd"><div><p class="eyebrow">Datos</p><h1 class="h1m">Respaldo de datos</h1></div><div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="btn sm back" data-act="backup-back">← Volver</button></div></div>'+
-  '<p class="sum">Guarda en un código todo lo de este navegador: historial, trofeos, torneos guardados, ausentes de hoy y las listas que hayas editado. Sirve para tener una copia o para pasar los datos a otro dispositivo o a otra dirección web. <b>Contiene nombres de estudiantes:</b> guárdalo en un lugar privado.</p>'+
+  return '<main class="narrow"><div class="hd"><div><p class="eyebrow">Datos</p><h1 class="h1m">Respaldo de datos</h1></div><div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="btn sm back" data-act="backup-back">← Volver</button></div></div>'+gBox()+
+  '<p class="sum"><b>Respaldo manual.</b> Guarda en un código todo lo de este navegador: historial, trofeos, torneos guardados, ausentes de hoy y las listas que hayas editado. Sirve para tener una copia o para pasar los datos a otro dispositivo o a otra dirección web. <b>Contiene nombres de estudiantes:</b> guárdalo en un lugar privado.</p>'+
   '<h2 class="h2" style="font-size:30px;margin-top:22px">Guardar</h2><button type="button" class="btn gold" data-act="bk-copy" style="margin-top:8px">Copiar respaldo</button>'+
   (S.bk?'<textarea class="ta csv" id="bkout" readonly aria-label="Código del respaldo" style="min-height:120px">'+esc(S.bk)+'</textarea><p class="hint">'+esc(S.bkMsg||'')+'</p>':'')+
   '<h2 class="h2" style="font-size:30px;margin-top:26px">Restaurar</h2><p class="hsub" style="font-size:14px">Pega el código y toca «Restaurar». Reemplaza los datos de este navegador por los del respaldo.</p><textarea class="ta" id="bkin" rows="4" aria-label="Pega aquí el código del respaldo" placeholder="LEMATES2:…" style="min-height:110px">'+esc(S.bkIn||'')+'</textarea>'+
   '<div class="stack" style="max-width:420px"><button type="button" class="btn" data-act="bk-restore">'+(S.confirmBk?'¿Seguro? Toca otra vez para restaurar':'Restaurar respaldo')+'</button></div>'+
   '<p class="err" role="alert" id="bkerr">'+esc(S.bkErr||'')+'</p>'+(S.bkOk?'<p class="okmsg" role="status">'+esc(S.bkOk)+'</p>':'')+'</main>';
+}
+
+/* ================= guardar en la cuenta de Google =================
+   Opcional. Guarda el mismo respaldo en la carpeta privada de la app en Google Drive (appDataFolder).
+   Sin servidor: el navegador habla directo con Google. Solo funciona desde la dirección oficial del juego. */
+const GCID='383533371575-2djefecnf8slnuf8opbeecr2ag5hcode.apps.googleusercontent.com';
+const GORIGIN='https://lmarmol-pixel.github.io',GFILE='lemates-datos.txt',GKEY='lemates271.g',GSCOPE='https://www.googleapis.com/auth/drive.appdata';
+const gAvail=()=>location.origin===GORIGIN;
+var GS={on:false,tok:'',exp:0,st:'off',msg:'',last:0,rmt:'',fid:'',busy:false,dirty:false,mute:false,timer:0};
+try{const z=JSON.parse(localStorage.getItem(GKEY)||'{}');if(z&&z.on&&gAvail()){GS.on=true;GS.st='need';GS.last=+z.last||0;GS.rmt=z.rmt||'';GS.fid=z.fid||''}}catch(e){}
+const gPersist=()=>{try{localStorage.setItem(GKEY,JSON.stringify({on:GS.on,last:GS.last,rmt:GS.rmt,fid:GS.fid}))}catch(e){}};
+const hm=t=>{const d=new Date(t);return pad(d.getHours())+':'+pad(d.getMinutes())};
+function gUi(){try{if(S.screen==='backup'||S.screen==='home')render()}catch(e){}}
+let GLP=null,GTC=null,GR=null;
+function gLoad(){
+  if(window.google&&google.accounts&&google.accounts.oauth2)return Promise.resolve();
+  return GLP||(GLP=new Promise((res,rej)=>{const t=document.createElement('script');t.src='https://accounts.google.com/gsi/client';t.async=true;t.onload=()=>res();t.onerror=()=>{GLP=null;rej(new Error('net'))};document.head.appendChild(t)}));
+}
+function gToken(){
+  return gLoad().then(()=>new Promise((res,rej)=>{
+    if(!GTC)GTC=google.accounts.oauth2.initTokenClient({client_id:GCID,scope:GSCOPE,
+      callback:r=>{const q=GR;GR=null;if(!q)return;if(r&&r.access_token){GS.tok=r.access_token;GS.exp=Date.now()+Math.max(60,(+r.expires_in||3600)-90)*1000;q.ok()}else q.err(new Error((r&&r.error)||'token'))},
+      error_callback:e=>{const q=GR;GR=null;if(q)q.err(new Error((e&&e.type)||'popup'))}});
+    GR={ok:res,err:rej};GTC.requestAccessToken({prompt:''});
+  }));
+}
+const gTokOk=()=>!!GS.tok&&Date.now()<GS.exp;
+async function gApi(url,opt){
+  const o=Object.assign({},opt||{});o.headers=Object.assign({Authorization:'Bearer '+GS.tok},o.headers||{});
+  const r=await fetch(url,o);
+  if(!r.ok){const e=new Error('http '+r.status);e.st=r.status;throw e}
+  return r;
+}
+async function gFind(){
+  const r=await gApi('https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&pageSize=10&fields='+encodeURIComponent('files(id,modifiedTime)')+'&q='+encodeURIComponent("name='"+GFILE+"' and trashed=false"));
+  const j=await r.json();return (j.files||[])[0]||null;
+}
+async function gGet(id){return (await gApi('https://www.googleapis.com/drive/v3/files/'+id+'?alt=media')).text()}
+async function gPut(code){
+  let r;
+  if(GS.fid){r=await gApi('https://www.googleapis.com/upload/drive/v3/files/'+GS.fid+'?uploadType=media&fields=id,modifiedTime',{method:'PATCH',headers:{'Content-Type':'text/plain'},body:code})}
+  else{
+    const bd='lemates'+Date.now();
+    const body='--'+bd+'\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n'+JSON.stringify({name:GFILE,parents:['appDataFolder']})+'\r\n--'+bd+'\r\nContent-Type: text/plain\r\n\r\n'+code+'\r\n--'+bd+'--';
+    r=await gApi('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields='+encodeURIComponent('id,modifiedTime'),{method:'POST',headers:{'Content-Type':'multipart/related; boundary='+bd},body});
+  }
+  const j=await r.json();GS.fid=j.id;GS.rmt=j.modifiedTime;gPersist();
+}
+/* Une los datos de este navegador (a) con los de la cuenta (b) sin perder nada: historial y salón se suman; lo demás lo trae el lado más reciente */
+const hk=e=>[e.t,e.st,e.a,e.b,e.op||'*',e.ok].join('|');
+function mergeDB(a,b){
+  const o=JSON.parse(JSON.stringify(a)),bn=(+b.mt||0)>(+a.mt||0);
+  ['libre','prefs','classes','rep','tour','abs'].forEach(k=>{if(bn&&b[k]!==undefined)o[k]=JSON.parse(JSON.stringify(b[k]))});
+  o.hist=o.hist||{};
+  Object.keys(b.hist||{}).forEach(k=>{
+    const la=o.hist[k]||(o.hist[k]=[]),seen=new Set(la.map(hk));
+    (b.hist[k]||[]).forEach(e=>{const h=hk(e);if(!seen.has(h)){seen.add(h);la.push(e)}});
+    la.sort((x,y)=>(x.t||0)-(y.t||0));if(la.length>4000)la.splice(0,la.length-4000);
+  });
+  o.hall=o.hall||{};
+  Object.keys(b.hall||{}).forEach(k=>{
+    const la=o.hall[k]||(o.hall[k]=[]),seen=new Set(la.map(x=>x.id));
+    (b.hall[k]||[]).forEach(x=>{if(!seen.has(x.id)){seen.add(x.id);la.push(x)}});
+    la.sort((x,y)=>(x.t||0)-(y.t||0));if(la.length>300)la.splice(0,la.length-300);
+  });
+  o.mt=Math.max(+a.mt||0,+b.mt||0);
+  return o;
+}
+function gErr(e){
+  const m=String((e&&e.message)||e||'');
+  if(/popup/i.test(m))return 'No se abrió la ventana de Google. Permite las ventanas emergentes de esta página e inténtalo otra vez.';
+  if(/access_denied/.test(m))return 'No se dio el permiso en Google.';
+  if(/org_internal/.test(m))return 'Esa cuenta no puede usar la app. Entra con tu cuenta del colegio.';
+  if((e&&e.st>=500)||/^net$|Failed to fetch|NetworkError|Load failed/i.test(m))return 'No hay conexión con Google ahora. Se intentará de nuevo al próximo cambio.';
+  return 'No se pudo guardar en Google ('+m.slice(0,60)+').';
+}
+/* first: al conectar, trae y une lo de la cuenta · ask: puede abrir la ventana de Google (solo desde un toque del usuario) */
+async function gRun(first,ask){
+  if(!GS.on&&!first)return;
+  if(GS.busy){GS.dirty=true;return}
+  GS.busy=true;GS.msg='';
+  try{
+    if(!gTokOk()){
+      if(!ask){GS.st='need';return}
+      GS.st='busy';gUi();await gToken();
+    }
+    GS.st='busy';gUi();GS.dirty=false;
+    const f=await gFind();
+    if(f){
+      GS.fid=f.id;
+      if(first||f.modifiedTime!==GS.rmt){
+        const rdb=await unpackBackup(await gGet(f.id));
+        GS.mute=true;try{applyBackup(mergeDB(DB,rdb))}finally{GS.mute=false}
+        try{if(G)G.undo=null}catch(e){}
+      }
+    }else{GS.fid='';GS.rmt=''}
+    const code=await packBackup();
+    try{await gPut(code)}catch(e){if(e.st===404&&GS.fid){GS.fid='';await gPut(code)}else throw e}
+    GS.on=true;GS.last=Date.now();GS.st='ok';gPersist();
+  }catch(e){
+    if(e&&e.st===401){GS.tok='';GS.exp=0;GS.st='need'}
+    else{GS.st='err';GS.msg=gErr(e)}
+  }finally{
+    GS.busy=false;gUi();
+    if(GS.dirty&&GS.st==='ok')gSoon();
+  }
+}
+function gSoon(){
+  if(!GS||!GS.on||GS.mute)return;
+  GS.dirty=true;clearTimeout(GS.timer);GS.timer=setTimeout(()=>{gRun(false,false)},5000);
+}
+document.addEventListener('visibilitychange',()=>{if(document.hidden&&GS.on&&GS.dirty&&gTokOk()){clearTimeout(GS.timer);gRun(false,false)}});
+if(GS.on)gLoad().catch(()=>{});
+function gLine(){
+  if(GS.st==='busy')return 'Guardando en Google…';
+  if(GS.st==='need')return 'Conectado antes; falta reconectar. Mientras tanto los cambios quedan solo en este navegador y se suben al reconectar.';
+  if(GS.st==='err')return 'Conectado, pero el último guardado falló.';
+  return 'Conectado'+(GS.last?' · guardado a las '+hm(GS.last):'')+'. Cada cambio se guarda solo.';
+}
+function gBox(){
+  let h='<section class="gbox" aria-labelledby="gh"><h2 class="h2" id="gh" style="font-size:30px;margin:0">Guardar en mi cuenta de Google</h2>';
+  if(!gAvail())return h+'<p class="sum">Esta función está en la dirección oficial del juego (lmarmol-pixel.github.io/lemates). Aquí no está disponible.</p></section>';
+  gLoad().catch(()=>{});
+  h+='<p class="sum">Los datos se guardan solos en una carpeta privada de tu Google Drive y se cargan al conectar desde cualquier dispositivo. Nadie más la ve y los estudiantes no necesitan cuenta para jugar.</p>';
+  if(!GS.on){
+    const b=GS.st==='busy';
+    h+='<button type="button" class="btn gold" data-act="g-connect" style="margin-top:8px"'+(b?' disabled':'')+'>'+(b?'Conectando…':'Conectar con Google')+'</button>';
+  }else{
+    h+='<p class="'+(GS.st==='ok'?'okmsg':'hint')+'" role="status">'+gLine()+'</p><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">'+
+      (GS.st==='need'?'<button type="button" class="btn gold" data-act="g-connect">Reconectar con Google</button>':'<button type="button" class="btn sm" data-act="g-now"'+(GS.st==='busy'?' disabled':'')+'>Guardar ahora</button>')+
+      '<button type="button" class="btn sm" data-act="g-off">Desconectar</button></div>';
+  }
+  if(GS.msg)h+='<p class="err" role="alert">'+esc(GS.msg)+'</p>';
+  return h+'</section>';
+}
+function gChip(){
+  if(!GS||!GS.on)return '';
+  if(GS.st==='need')return ' <button type="button" class="linkbtn" data-act="g-connect">☁ Reconectar con Google</button>';
+  return ' <button type="button" class="linkbtn" data-act="backup">☁ Google: '+(GS.st==='busy'?'guardando…':GS.st==='err'?'revisar':'guardado'+(GS.last?' '+hm(GS.last):''))+'</button>';
 }
 /* ================= ausentes ================= */
 function absHtml(c){
@@ -1366,7 +1507,7 @@ function viewHome(){
   }).join('');
   const has=parseNames(DB.libre).length>0;
   return banner()+'<main class="home">'+identity()+'<div class="cards">'+cards+'</div>'+
-  '<section class="libre" aria-labelledby="libreh"><h2 class="h2" id="libreh">Libre</h2><p class="muted">Escribe un nombre por línea. Esos son los que van a salir.</p><textarea id="libre" class="ta" rows="5" placeholder="Ana Pérez&#10;Luis Gómez" aria-label="Nombres, uno por línea">'+esc(DB.libre)+'</textarea><button type="button" class="btn gold xl" id="libreGo" data-act="libre-start"'+(has?'':' disabled')+'>Empezar</button></section><p class="foot"><button type="button" class="linkbtn" data-act="backup">Respaldo de datos</button></p></main>';
+  '<section class="libre" aria-labelledby="libreh"><h2 class="h2" id="libreh">Libre</h2><p class="muted">Escribe un nombre por línea. Esos son los que van a salir.</p><textarea id="libre" class="ta" rows="5" placeholder="Ana Pérez&#10;Luis Gómez" aria-label="Nombres, uno por línea">'+esc(DB.libre)+'</textarea><button type="button" class="btn gold xl" id="libreGo" data-act="libre-start"'+(has?'':' disabled')+'>Empezar</button></section><p class="foot"><button type="button" class="linkbtn" data-act="backup">Respaldo de datos</button>'+gChip()+'</p></main>';
 }
 function viewLock(){
   const c=CLASSES.find(x=>x.id===S.lockId);
@@ -1822,6 +1963,9 @@ function act(a,d){
       unpackBackup(txt).then(db=>{applyBackup(db);S.bkIn='';S.bk='';S.bkMsg='';S.bkOk='Listo: los datos se restauraron.';render()}).catch(()=>{S.bkErr='Ese código no es un respaldo válido.';render()});
       break;
     }
+    case 'g-connect':GS.msg='';if(!GS.on)GS.st='busy';gUi();gRun(true,true);break;
+    case 'g-now':gRun(false,true);break;
+    case 'g-off':{const t=GS.tok;GS.on=false;GS.tok='';GS.exp=0;GS.st='off';GS.msg='';clearTimeout(GS.timer);gPersist();try{if(t)google.accounts.oauth2.revoke(t,()=>{})}catch(e){}gUi();break}
     case 'duel-play':startDuel();break;
     case 'pa':duelPoint('a');break;
     case 'pb':duelPoint('b');break;
