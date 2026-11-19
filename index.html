@@ -1436,7 +1436,18 @@ async function gPut(code){
 const hk=e=>[e.t,e.st,e.a,e.b,e.op||'*',e.ok].join('|');
 function mergeDB(a,b){
   const o=JSON.parse(JSON.stringify(a)),bn=(+b.mt||0)>(+a.mt||0);
-  ['libre','prefs','classes','rep','tour','abs'].forEach(k=>{if(bn&&b[k]!==undefined)o[k]=JSON.parse(JSON.stringify(b[k]))});
+  ['libre','prefs'].forEach(k=>{if(bn&&b[k]!==undefined)o[k]=JSON.parse(JSON.stringify(b[k]))});
+  /* lo que va por curso (listas, repasos, torneo guardado, ausentes) se une curso por curso:
+     lo que solo tiene un lado se conserva; si los dos tienen el mismo curso, gana el lado más reciente */
+  const dict=v=>v&&typeof v==='object'&&!Array.isArray(v)?v:{};
+  ['classes','rep','tour','abs'].forEach(k=>{
+    const x=dict(a[k]),y=dict(b[k]),r={};
+    new Set(Object.keys(x).concat(Object.keys(y))).forEach(id=>{
+      const v=(id in x)&&(id in y)?(bn?y[id]:x[id]):(id in x?x[id]:y[id]);
+      r[id]=JSON.parse(JSON.stringify(v));
+    });
+    o[k]=r;
+  });
   o.hist=o.hist||{};
   Object.keys(b.hist||{}).forEach(k=>{
     const la=o.hist[k]||(o.hist[k]=[]),seen=new Set(la.map(hk));
@@ -1449,6 +1460,8 @@ function mergeDB(a,b){
     (b.hall[k]||[]).forEach(x=>{if(!seen.has(x.id)){seen.add(x.id);la.push(x)}});
     la.sort((x,y)=>(x.t||0)-(y.t||0));if(la.length>300)la.splice(0,la.length-300);
   });
+  /* un torneo guardado que ya terminó en el otro lado (está en el salón) no se vuelve a abrir */
+  Object.keys(o.tour).forEach(id=>{const t=o.tour[id];if(t&&t.tid&&(o.hall[id]||[]).some(x=>x.id===t.tid))delete o.tour[id]});
   o.mt=Math.max(+a.mt||0,+b.mt||0);
   return o;
 }
