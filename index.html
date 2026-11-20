@@ -494,6 +494,15 @@ body.hclosed .hch{transform:rotate(-45deg);margin-bottom:0}
 .hl.hi{border-color:var(--gold)}
 .hl .pn{font-family:var(--display);font-size:24px;color:var(--muted)}.hl.hi .pn{color:var(--gold)}
 .hl .hn{font-weight:600;display:grid}.hl .hn small{font-weight:400;color:var(--muted);font-size:12.5px}
+.hl.cC{grid-template-columns:56px 1fr auto;border-left-width:7px;padding:10px 16px 10px 10px}
+.hl.cC.r1{border-color:#e0b53c;border-left-color:#f5b81c;background:linear-gradient(90deg,#fff6d6,#fff 70%);padding-top:14px;padding-bottom:14px}
+.hl.cC.r2{border-color:#cfd4dc;border-left-color:#9aa3b2;background:linear-gradient(90deg,#f1f3f7,#fff 70%)}
+.hl.cC.r3{border-color:#e6c7ac;border-left-color:#cd8450;background:linear-gradient(90deg,#fbeee2,#fff 70%)}
+.hl.cC .hmd{display:grid;place-items:center}.hl.cC .medal{filter:drop-shadow(0 2px 2px rgba(0,0,0,.2))}
+.hl.cC .cn{display:inline-flex;align-items:center;gap:8px}.hl.cC.r1 .cn{font-size:21px;font-family:var(--display);font-weight:700}
+.hl.cC .ccr{display:inline-flex;color:#d79a0b}.hl.cC .ccr svg{width:22px;height:22px}
+.hl.cC.r1 .hn small{font-family:var(--body);font-weight:400}
+@media(max-width:560px){.hl.cC{grid-template-columns:52px 1fr}.hl.cC .hm{grid-column:2;justify-self:start}.hl.cC.r1 .cn{font-size:20px}}
 .hm{display:flex;gap:10px;align-items:center}
 .mc{display:inline-flex;align-items:center;gap:4px}
 .mc.g{color:var(--gold)}.mc.g svg{width:22px;height:22px}
@@ -1774,6 +1783,9 @@ function hallStats(c){
   return {H,by,list};
 }
 const TROPHY='<svg class="tro" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12v5a6 6 0 0 1-12 0V3z" fill="currentColor"/><path d="M6 5H3.5V7a3 3 0 0 0 3 3M18 5h2.5V7a3 3 0 0 1-3 3" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M11 14h2v3h-2zM8 18h8v3H8z" fill="currentColor"/></svg>';
+const MEDAL={1:['lmG','#c4440f','#9b2f08','#5b3d00'],2:['lmS','#1f5fe0','#1649b0','#3c4457'],3:['lmB','#17803f','#10612e','#4a2306']};
+const medalDefs='<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs><linearGradient id="lmG" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff1b3"/><stop offset=".45" stop-color="#f5b81c"/><stop offset="1" stop-color="#a87408"/></linearGradient><linearGradient id="lmS" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset=".45" stop-color="#c3c9d8"/><stop offset="1" stop-color="#7d869b"/></linearGradient><linearGradient id="lmB" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f8d3b0"/><stop offset=".45" stop-color="#cd8450"/><stop offset="1" stop-color="#85491f"/></linearGradient></defs></svg>';
+const medalSvg=(r,z)=>{const m=MEDAL[r];return '<svg class="medal" width="'+z+'" height="'+z+'" viewBox="0 0 64 64" aria-hidden="true" focusable="false"><path d="M19 2h11l6 22-9 4z" fill="'+m[1]+'"/><path d="M45 2H34l-6 22 9 4z" fill="'+m[2]+'"/><circle cx="32" cy="40" r="20" fill="url(#'+m[0]+')" stroke="rgba(0,0,0,.22)" stroke-width="1.2"/><circle cx="32" cy="40" r="15" fill="none" stroke="rgba(255,255,255,.65)" stroke-width="1.6"/><text x="32" y="47" text-anchor="middle" font-family="Fraunces,Georgia,serif" font-weight="800" font-size="21" fill="'+m[3]+'">'+r+'</text></svg>'};
 function viewHall(){
   const c=S.course,hs=hallStats(c),H=hs.H;
   const bar='<div class="hd"><div><p class="eyebrow">'+esc(c.name)+'</p><h1 class="h1m">Salón de campeones</h1></div><div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="btn sm back" data-act="hall-back">← Volver</button><button type="button" class="btn sm" data-act="home">Cambiar curso</button></div></div>';
@@ -1783,12 +1795,14 @@ function viewHall(){
   let rank=0,prev='';
   const rows=med.map((x,i)=>{
     const key=x.g+','+x.s+','+x.b;if(key!==prev){rank=i+1;prev=key}
-    return '<div class="hl'+(rank<=3?' hi':'')+'"><span class="pn">'+rank+'.º</span><span class="hn">'+esc(x.n)+'<small>'+x.p+(x.p===1?' torneo jugado':' torneos jugados')+'</small></span><span class="hm"><span class="mc g" title="Campeón" aria-label="'+x.g+' veces campeón">'+TROPHY+'<b>'+x.g+'</b></span><span class="mc s" title="Subcampeón" aria-label="'+x.s+' veces subcampeón"><i>2</i><b>'+x.s+'</b></span><span class="mc b" title="Tercer lugar" aria-label="'+x.b+' veces tercer lugar"><i>3</i><b>'+x.b+'</b></span></span></div>';
+    const pj=x.p+(x.p===1?' torneo jugado':' torneos jugados'),hm='<span class="hm"><span class="mc g" title="Campeón" aria-label="'+x.g+' veces campeón">'+TROPHY+'<b>'+x.g+'</b></span><span class="mc s" title="Subcampeón" aria-label="'+x.s+' veces subcampeón"><i>2</i><b>'+x.s+'</b></span><span class="mc b" title="Tercer lugar" aria-label="'+x.b+' veces tercer lugar"><i>3</i><b>'+x.b+'</b></span></span>';
+    if(rank<=3)return '<div class="hl cC r'+rank+'"><span class="hmd" role="img" aria-label="'+rank+'.º lugar">'+medalSvg(rank,46)+'</span><span class="hn"><span class="cn">'+esc(x.n)+(rank===1?'<i class="ccr" aria-hidden="true">'+CROWN+'</i>':'')+'</span><small>'+pj+'</small></span>'+hm+'</div>';
+    return '<div class="hl"><span class="pn">'+rank+'.º</span><span class="hn">'+esc(x.n)+'<small>'+pj+'</small></span>'+hm+'</div>';
   }).join('');
   const nm=(e,k)=>{const l=k==='ch'?e.cn:e.rn,a=(e[k]||[]).map(esc).join(', ');return l?esc(l)+' · '+a:a};
   const recent=H.slice().reverse().slice(0,10).map(e=>'<div class="hr"><b>'+dmy(e.t)+'</b><u>Campeón</u><span>'+nm(e,'ch')+'</span><u>Segundo</u><span>'+nm(e,'ru')+'</span></div>').join('');
   return '<main class="narrow">'+bar+mjh+
-    '<h2 class="h2" style="font-size:30px;margin-top:22px">Top de campeones</h2><p class="hsub" style="font-size:14px">Más torneos ganados arriba; si empatan, cuentan los segundos y terceros lugares. En torneos por equipos, el trofeo es de cada integrante.</p>'+
+    (rows?medalDefs:'')+'<h2 class="h2" style="font-size:30px;margin-top:22px">Top de campeones</h2><p class="hsub" style="font-size:14px">Más torneos ganados arriba; si empatan, cuentan los segundos y terceros lugares. En torneos por equipos, el trofeo es de cada integrante.</p>'+
     (rows||'<p class="hint">Nadie ha llegado al podio todavía.</p>')+
     (oth.length?'<h2 class="h2" style="font-size:26px;margin-top:26px">También han participado</h2><div class="pchips" style="margin-top:8px">'+oth.map(x=>'<span>'+esc(x.n)+' · '+x.p+'</span>').join('')+'</div>':'')+
     '<h2 class="h2" style="font-size:26px;margin-top:26px">Últimos torneos</h2><div style="margin-top:6px">'+recent+'</div>'+
