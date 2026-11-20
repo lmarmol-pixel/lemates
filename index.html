@@ -946,7 +946,7 @@ function nvBoot(){
 
 /* ================= estado ================= */
 const S={screen:'home',view:'play',course:null,lockId:null,msg:'',t0:0,teams:null,statsBack:'setup',sel:null,csv:'',copied:false,confirmReset:false,confirmBack:false,fromDuel:false,
-  cfg:{mode:'individual',tmode:'students',bmode:'students',bdiff:'normal',teamsN:2,rounds:5,first:3,semi:5,final:7,losers:true},repId:null};
+  cfg:{mode:'individual',tmode:'students',bmode:'students',bdiff:'normal',teamsN:2,rounds:5,first:3,semi:5,final:7,losers:true,hard:true},repId:null};
 let G=null,TR=null,D=null,confettiDone=false;
 
 /* ================= preguntas ================= */
@@ -985,7 +985,7 @@ function pickAS(rec,hard,ops){
   rec.push(key);if(rec.length>14)rec.shift();
   return [pick.a,pick.b,pick.op];
 }
-function pickPair(h,tables,lo,hi){
+function pickPair(h,tables,lo,hi,bset){
   const rec=h.recent||(h.recent=[]);
   const ops=OPS[DB.prefs.op]||OPS.mul;
   let op=ops[0];
@@ -998,10 +998,27 @@ function pickPair(h,tables,lo,hi){
   if(op==='+'||op==='-')return pickAS(rec,lo!==undefined,ops.length>1?[op]:ops);
   const A=tables.length?tables:TABLES;
   let a,b,key,tries=0;
-  do{a=A[rnd(A.length)];b=(lo||2)+rnd((hi||12)-(lo||2)+1);key=(op==='*'?'':op)+a+'x'+b;tries++}while(rec.includes(key)&&tries<30);
+  do{a=A[rnd(A.length)];b=bset&&bset.length?bset[rnd(bset.length)]:(lo||2)+rnd((hi||12)-(lo||2)+1);key=(op==='*'?'':op)+a+'x'+b;tries++}while(rec.includes(key)&&tries<30);
   rec.push(key);if(rec.length>14)rec.shift();
   return [a,b,op];
 }
+/* Torneo: semifinales, finales y tercer lugar con las operaciones más difíciles.
+   Tablas del 5 al 9 y la del 12 (sin ×10 ni ×11, que casi todos saben). Si entre las tablas marcadas no hay ninguna de esas,
+   se usan las más altas de las marcadas. En sumas y restas entra el modo difícil de siempre (números más altos). */
+const HARD_B=[5,6,7,8,9,12];
+function hardTabs(){
+  const t=(DB.prefs.tables&&DB.prefs.tables.length?DB.prefs.tables:TABLES).slice().sort((x,y)=>x-y),hi=t.filter(x=>HARD_B.includes(x));
+  return hi.length?hi:t.slice(-3);
+}
+/* Semifinal, final, gran final y tercer lugar. En doble eliminación: la semifinal y la final del cuadro principal,
+   la final de no ganadores y la gran final. Los torneos guardados antes de esta opción siguen como estaban. */
+function hardMatch(m){
+  if(!TR||!TR.cfg||TR.cfg.hard!==true||!m)return false;
+  if(m.br==='T'||m.br==='G')return true;
+  if(TR.dbl)return (m.br==='W'&&m.r>=TR.k-2)||(m.br==='L'&&m.r===TR.Lc);
+  return m.r>=TR.k-2;
+}
+const hardTag=m=>hardMatch(m)?' · <b style="color:var(--gold)">Operaciones difíciles</b>':'';
 /* el camino para llegar al resultado (solo cuando ayuda) */
 function hintOf(q){
   const a=q.a,b=q.b,r=calc(q),h=a+' '+opSym(q.op)+' '+b+' → ';
@@ -1609,7 +1626,7 @@ function startTour(){
   else ents=presentOf(c).map((n,i)=>({n,i}));
   buildTour(ents,S.cfg.losers);
   if(S.cfg.tmode==='teams'){TR.members=S.teams.filter(m=>m.length).map(m=>m.slice());TR.part=[].concat.apply([],TR.members)}else TR.part=ents.map(e=>e.n);
-  TR.cfg={first:S.cfg.first,semi:S.cfg.semi,final:S.cfg.final};TR.cur=nextMatch();
+  TR.cfg={first:S.cfg.first,semi:S.cfg.semi,final:S.cfg.final,hard:S.cfg.hard!==false};TR.cur=nextMatch();
   D=null;S.t0=0;S.fromDuel=false;S.repId=null;S.screen='bracket';confettiDone=false;saveTour();render();
 }
 function startDuel(){
@@ -1623,7 +1640,7 @@ function duelCount(){
   later(()=>{D.cnt--;if(D.cnt>0)duelCount();else duelAsk()},1000);
 }
 function duelAsk(){
-  const p=pickPair(D,DB.prefs.tables);D.q={a:p[0],b:p[1],op:p[2]};D.phase='ask';D.revealed=false;
+  const p=hardMatch(TR.M[D.ref])?pickPair(D,hardTabs(),5,12,HARD_B):pickPair(D,DB.prefs.tables);D.q={a:p[0],b:p[1],op:p[2]};D.phase='ask';D.revealed=false;
   snd.go();timerStart(DB.prefs.secs,duelTimeout);render();
 }
 function duelTimeout(){D.revealed=true;D.phase='reveal';snd.end();render()}
@@ -2153,6 +2170,9 @@ function viewSetup(){
     h+='<p class="hint">'+(cf.losers?'Doble eliminación: quien pierde sigue jugando en la ronda de no ganadores y sale con la segunda derrota. En la gran final, si gana quien viene de la ronda de no ganadores, se juega un desempate.':'Eliminación simple: quien pierde sale del torneo.')+'</p>';
     h+='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:16px">'+grp('first','Primeras')+grp('semi','Semifinal')+grp('final','Final')+'</div>';
     h+='<p class="hint">Cada número es «al mejor de»: 3 es primero a 2, 5 primero a 3 y 7 primero a 4.'+(cf.losers?' «Semifinal» vale para la final del cuadro principal y la final de no ganadores; «Final», para la gran final.':'')+'</p>';
+    const hq=usesTables(opm),ha=usesMax(opm);
+    h+='<div style="margin-top:16px"><span class="lab">Semifinales y final difíciles</span><div class="two" style="margin-top:6px"><button type="button" class="seg '+(cf.hard?'on':'')+'" data-act="hard" data-v="1" aria-pressed="'+!!cf.hard+'">Sí</button><button type="button" class="seg '+(!cf.hard?'on':'')+'" data-act="hard" data-v="0" aria-pressed="'+!cf.hard+'">No</button></div></div>';
+    h+='<p class="hint">'+(cf.hard?'Desde la semifinal (también la final'+(cf.losers?', la final de no ganadores, la gran final':'')+' y el tercer lugar) '+(hq&&ha?'las multiplicaciones salen de las tablas del 5 al 9 y la del 12, sin ×10 ni ×11, y las sumas y restas usan los números más altos.':hq?'las preguntas salen de las tablas del 5 al 9 y la del 12, sin ×10 ni ×11.':'las preguntas usan los números más altos.')+(hq&&!tabs.some(x=>HARD_B.includes(x))&&tabs.length?' Entre las tablas marcadas no hay ninguna de esas, así que usará las más altas que marcaste.':''):'Todas las rondas usan las mismas preguntas, sin importar la fase.')+'</p>';
     if(cf.tmode==='teams')h+=teamSetupHtml(Math.min(4,list.length),list);
     h+='<p class="rules">Duelo uno contra uno con la misma '+(opm==='mul'?'multiplicación':'operación')+'. Quien conteste bien primero se lleva el punto. Si algo sale mal, en el duelo puede quitar un punto y en el cuadro puede repetir un duelo.</p>';
   }
@@ -2383,7 +2403,7 @@ function viewBracket(){
     pod='<section class="pod" aria-label="Podio">'+(NAVIDAD?'<div class="nvstrip" aria-hidden="true"></div>':'')+'<div class="pdh"><span aria-hidden="true">✦</span>Podio<span aria-hidden="true">✦</span></div><div class="pds'+(t3?'':' two')+'">'+col(1,'Campeón',ch.e,1.05)+col(2,'Subcampeón',ru.e,.55)+(t3?col(3,'Tercer lugar',t3.e,.1):'')+'</div></section>';
   }
   const btn=done?'<div class="goto top"><button type="button" class="btn gold xl" data-act="to-setup">Nuevo torneo</button><button type="button" class="btn xl" data-act="hall">Salón de campeones</button></div>':'';
-  const tag=!done&&M[cur].br==='L'?' · ronda de no ganadores':'';
+  const tag=(!done&&M[cur].br==='L'?' · ronda de no ganadores':'')+(done?'':hardTag(M[cur]));
   return '<div class="tourp"><div class="top3"><div><p class="eyebrow">Torneo'+tag+'</p><h1 class="h1m" style="margin-bottom:12px">'+(done?'Cuadro':mTitle(M[cur]))+'</h1></div><div class="r"><button type="button" class="btn sm back" data-act="bracket-back">'+(S.fromDuel?'← Volver al duelo':'← Volver')+'</button>'+musBtn()+'<button type="button" class="btn sm" data-act="mute">'+(DB.prefs.mute?'Activar sonido':'Silencio')+'</button>'+(done?'':'<button type="button" class="btn sm" data-act="save-exit">Guardar y salir</button>')+'<button type="button" class="btn sm" data-act="home">Cambiar curso</button></div></div>'+pod+(done?placesHtml():'')+btn+bracketHtml()+'</div>';
 }
 const pcard=(e,side,sc)=>'<div class="pc" style="--tc:'+ecol(e,side)+'"><div><small>'+esc(e.n)+'</small><b>'+sc+'</b></div><button type="button" class="btn sm minus" data-act="minus" data-side="'+side+'"'+(sc>0?'':' disabled')+' aria-label="Quitar un punto a '+esc(e.n)+'">−1</button></div>';
@@ -2397,7 +2417,7 @@ function viewDuel(){
     else st+='<div class="tbox"><div class="tnum" id="tnum">'+secLeft()+'</div><div class="tbar"><b id="tbar" style="width:'+(T.total?T.left/T.total*100:100)+'%"></b></div></div>';
     st+='<div class="btns" style="margin-top:22px"><div class="g2"><button type="button" class="btn big pa" style="--tc:'+ecol(A,'a')+'" data-act="pa">'+esc(A.n)+'</button><button type="button" class="btn big pa" style="--tc:'+ecol(B,'b')+'" data-act="pb">'+esc(B.n)+'</button></div><div class="g2"><button type="button" class="btn" data-act="pnone">Nadie</button>'+(D.phase==='reveal'?'<button type="button" class="btn" data-act="pnone">Otra pregunta</button>':'<button type="button" class="btn" data-act="dreveal">Mostrar respuesta</button>')+'</div>'+(D.phase!=='reveal'?'<button type="button" class="btn block" data-act="dpause">'+(D.phase==='paused'?'Continuar':'Pausar')+'</button>':'')+'</div><button type="button" class="linkbtn" data-act="view-bracket" style="margin-top:10px">Ver cuadro</button><p class="keys">Atajos: 1 y 2 dan el punto · 0 nadie · R respuesta · P pausa</p>';
   }
-  return '<div class="tourp"><div class="top3"><div><p class="eyebrow">Torneo'+(m.br==='L'?' · ronda de no ganadores':'')+'</p><h1 class="h1m" style="margin-bottom:0">'+mTitle(m)+'</h1></div><div class="r"><button type="button" class="btn sm back" data-act="view-bracket"'+(D.phase==='count'?' disabled':'')+'>← Volver</button><button type="button" class="btn sm" data-act="mute">'+(DB.prefs.mute?'Activar sonido':'Silencio')+'</button><button type="button" class="btn sm" data-act="save-exit">Guardar y salir</button><button type="button" class="btn sm" data-act="home">Cambiar curso</button></div></div>'+
+  return '<div class="tourp"><div class="top3"><div><p class="eyebrow">Torneo'+(m.br==='L'?' · ronda de no ganadores':'')+hardTag(m)+'</p><h1 class="h1m" style="margin-bottom:0">'+mTitle(m)+'</h1></div><div class="r"><button type="button" class="btn sm back" data-act="view-bracket"'+(D.phase==='count'?' disabled':'')+'>← Volver</button><button type="button" class="btn sm" data-act="mute">'+(DB.prefs.mute?'Activar sonido':'Silencio')+'</button><button type="button" class="btn sm" data-act="save-exit">Guardar y salir</button><button type="button" class="btn sm" data-act="home">Cambiar curso</button></div></div>'+
   '<main class="duel"><p class="rule">Al mejor de '+D.best+' · primero a '+D.ft+'</p><div class="pl2">'+pcard(A,'a',m.sa)+pcard(B,'b',m.sb)+'</div><div class="dstage">'+st+'</div></main></div>';
 }
 
@@ -2515,6 +2535,7 @@ function act(a,d){
     case 'resume-tour':TR=JSON.parse(JSON.stringify(DB.tour[c.id]));S.repId=null;S.fromDuel=false;S.t0=0;S.screen='bracket';confettiDone=false;render();break;
     case 'discard-tour':delete DB.tour[c.id];save();render();break;
     case 'losers':S.cfg.losers=d.v==='1';render();break;
+    case 'hard':S.cfg.hard=d.v==='1';render();break;
     case 'minus':duelMinus(d.side);break;
     case 'rep':{
       const id=+d.id;
