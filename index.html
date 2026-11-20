@@ -97,10 +97,15 @@ h1,h2,h3,p{margin:0}
 .ar{border:1px solid var(--line);border-radius:14px;padding:12px 16px;margin-top:8px;display:grid;gap:2px}
 .ar b{font-size:18px}.ar span{color:var(--muted);font-size:14px}
 .modes{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:22px}
-.mode{height:65px;font-size:20px}
+.mode{height:65px;font-size:20px;display:flex;align-items:center;justify-content:center;gap:10px}
+.mode .mi{width:38px;height:38px;border-radius:12px;display:grid;place-items:center;flex:none}
+.mode .mi svg{width:25px;height:25px}
+.mode.k1 .mi{background:#e6efff;color:#2a62d6}.mode.k2 .mi{background:#e2f5e9;color:#17803f}.mode.k3 .mi{background:#fff0cc;color:#a87408}.mode.k4 .mi{background:#efe9ff;color:#6a3fd6}
+@media (max-width:380px){.mode{font-size:17px;gap:8px}.mode .mi{width:32px;height:32px;border-radius:10px}.mode .mi svg{width:21px;height:21px}}
 .segs{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
 .seg{height:46px;font-size:18px}.seg.sm{height:40px;font-size:15px}
 .on{background:var(--gold);border-color:var(--gold);color:var(--cream)}
+.mode.on .mi{background:var(--cream);color:var(--gold)}
 .chip:disabled,.seg:disabled{opacity:.4}
 .two{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .saved{display:flex;align-items:center;justify-content:space-between;gap:10px;border:1px solid var(--line);border-radius:16px;padding:12px 16px;margin-bottom:6px;flex-wrap:wrap}
@@ -2207,6 +2212,11 @@ function canStart(list){
   if(cf.mode==='teams')return list.length>=2&&teamsOk;
   return cf.tmode==='teams'?teamsOk:list.length>=2;
 }
+const MODE_IC=(()=>{const S=b=>'<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">'+b+'</svg>';return {
+  individual:S('<circle cx="12" cy="8" r="3.6"/><path d="M4.8 20c0-4.1 3.2-6.4 7.2-6.4s7.2 2.3 7.2 6.4"/>'),
+  teams:S('<circle cx="12" cy="8.2" r="3"/><path d="M6.6 19.6c0-3.5 2.3-5.4 5.4-5.4s5.4 1.9 5.4 5.4"/><circle cx="4.6" cy="10.4" r="2.1"/><path d="M1.4 18.2c0-2.4 1.5-3.9 3.7-3.9.7 0 1.3.1 1.8.4"/><circle cx="19.4" cy="10.4" r="2.1"/><path d="M22.6 18.2c0-2.4-1.5-3.9-3.7-3.9-.7 0-1.3.1-1.8.4"/>'),
+  tour:'<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M7 3.8h10v5a5 5 0 0 1-10 0v-5z" fill="currentColor"/><path d="M7 5.8H4.4v1.7a3 3 0 0 0 3.1 3M17 5.8h2.6v1.7a3 3 0 0 1-3.1 3" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M11 14.3h2v2.6h-2zM7.8 17.6h8.4v2.6H7.8z" fill="currentColor"/></svg>',
+  boss:S('<path d="M12 3.4v2.4"/><circle cx="12" cy="2.9" r=".9" fill="currentColor"/><rect x="4.5" y="6" width="15" height="12.4" rx="3.4"/><path d="M2.3 10.8v4M21.7 10.8v4"/><circle cx="9.1" cy="11.6" r="1.3" fill="currentColor" stroke="none"/><circle cx="14.9" cy="11.6" r="1.3" fill="currentColor" stroke="none"/><path d="M9 15.4h6"/>')};})();
 function viewSetup(){
   const c=S.course,list=presentOf(c),cf=S.cfg,tabs=DB.prefs.tables,saved=DB.tour[c.id]&&DB.tour[c.id].v===2?DB.tour[c.id]:null;
   let h='<main class="narrow"><div class="hd"><div><p class="eyebrow">'+esc(c.name)+'</p><h1 class="h1m">Cómo jugamos</h1></div><div style="display:flex;gap:8px;flex-wrap:wrap">'+(c.id!=='libre'?'<button type="button" class="btn sm" data-act="edit-class">Editar lista</button>':'')+'<button type="button" class="btn sm" data-act="home">Volver</button></div></div>';
@@ -2217,7 +2227,7 @@ function viewSetup(){
   if(usesTables(opm))h+='<div class="sec"><span class="lab">Tablas</span><div style="display:flex;gap:6px"><button type="button" class="btn sm" data-act="tbl-all">Todas</button><button type="button" class="btn sm" data-act="tbl-none">Ninguna</button></div></div><div class="chips">'+
     TABLES.map(n=>'<button type="button" class="chip '+(tabs.includes(n)?'on':'')+'" data-act="tbl" data-n="'+n+'" aria-pressed="'+tabs.includes(n)+'">'+n+'</button>').join('')+'</div>'+(opm==='all'?'<p class="hint">Las tablas marcadas son para multiplicar.</p>':opm==='fac'?'<p class="hint">Se muestra la multiplicación con un número escondido: 7 × ? = 56. La respuesta es el número que falta.</p>':opm==='div'?'<p class="hint">División como lo contrario de multiplicar: 56 ÷ 7 = ?. Siempre es exacta y usa las tablas marcadas.</p>':opm==='tab'?'<p class="hint">Mezcla, con las tablas marcadas: multiplicar (7 × 8), factor faltante (7 × ? = 56) y dividir (56 ÷ 7).</p>':'');
   if(usesMax(opm))h+='<div class="sec"><span class="lab">Números hasta</span></div><div class="segs">'+[10,15,20].map(v=>'<button type="button" class="seg '+(DB.prefs.max===v?'on':'')+'" data-act="max" data-v="'+v+'" aria-pressed="'+(DB.prefs.max===v)+'">'+v+'</button>').join('')+'</div><p class="hint">'+(opm==='all'?'Para las sumas y restas: números del 2 al '+DB.prefs.max+'. ':'Números del 2 al '+DB.prefs.max+'. ')+'En las restas, el resultado nunca es 0 ni 1. Salen más seguido las que pasan la decena (8 + 7, 15 − 8), que son las difíciles.</p>';
-  h+='<div class="modes">'+[['individual','Individual'],['teams','Equipos'],['tour','Torneo'],['boss','Boss']].map(m=>'<button type="button" class="mode '+(cf.mode===m[0]?'on':'')+'" data-act="mode" data-m="'+m[0]+'">'+m[1]+'</button>').join('')+'</div>';
+  h+='<div class="modes">'+[['individual','Individual'],['teams','Equipos'],['tour','Torneo'],['boss','Boss']].map((m,i)=>'<button type="button" class="mode k'+(i+1)+(cf.mode===m[0]?' on':'')+'" data-act="mode" data-m="'+m[0]+'" aria-pressed="'+(cf.mode===m[0])+'"><span class="mi" aria-hidden="true">'+MODE_IC[m[0]]+'</span><span>'+m[1]+'</span></button>').join('')+'</div>';
   h+='<div class="sec"><span class="lab">Segundos por pregunta</span></div><div class="segs">'+[10,15,30].map(s=>'<button type="button" class="seg '+(DB.prefs.secs===s?'on':'')+'" data-act="secs" data-s="'+s+'">'+s+'s</button>').join('')+'</div>';
   if(cf.mode==='tour'){
     h+='<div class="two" style="margin-top:14px"><button type="button" class="seg '+(cf.tmode==='students'?'on':'')+'" data-act="tmode" data-m="students">Estudiantes</button><button type="button" class="seg '+(cf.tmode==='teams'?'on':'')+'" data-act="tmode" data-m="teams">Equipos</button></div>';
