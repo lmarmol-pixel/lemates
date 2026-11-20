@@ -7,6 +7,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..900;1,9..144,300..900&family=Outfit:wght@400..700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="katex/katex.min.css">
+<script src="katex/katex.min.js"></script>
 <style>
 :root{
   /* Dirección: banner de marca azul noche arriba; debajo, tarjetas blancas de borde fino y números en serif pesada, como un pizarrón limpio. */
@@ -610,6 +612,15 @@ sup{font-size:.58em;line-height:0;position:relative;vertical-align:baseline;top:
 .ident{align-items:flex-start}.opb{margin-top:8px}
 .leg .a{background:rgba(245,184,28,.6)}
 @media (max-width:900px){.fl:not(.e){display:none}}
+/* ===== Álgebra: tipografía de LaTeX (KaTeX), sin negrita ===== */
+.mult.alg.kx{font-weight:400;font-family:KaTeX_Main,"Times New Roman",serif;gap:.08em .3em;line-height:1.25;align-items:center;color:#1a1814}
+.mult.alg.nm.kx{gap:.08em .04em}
+.mult.alg.kx .katex,.rnum.alg.kx .katex{font-size:1.14em;line-height:1.2}
+.mult.alg.kx .kq,.mult.alg.kx .ko{display:inline-block;white-space:nowrap}
+.mult.alg.kx .ko{opacity:.8}
+.rnum.alg.kx{font-weight:400;font-family:KaTeX_Main,"Times New Roman",serif;font-size:clamp(34px,5.6vw,72px);line-height:1.25}
+.rnum.alg.kx .katex{white-space:normal}
+.dstage .mult.alg.kx{font-size:calc(var(--fs,60px)*.82)}
 @media (max-width:560px){.ops{grid-template-columns:repeat(2,1fr)}}
 </style>
 </head>
@@ -1086,6 +1097,9 @@ const ALG=(()=>{
   /* suma de términos tal como están, con su signo: 3x² − 5x + 2 */
   const fmt=(ts,V)=>ts.length?ts.map((t,i)=>(i===0?(t.c<0?'−':''):(t.c<0?' − ':' + '))+body(t,V)).join(''):'0';
   const pg=(ts,V)=>'<span class="pg">('+fmt(ts,V)+')</span>';
+  /* el mismo texto en LaTeX, para dibujarlo con KaTeX (3x^{2}-2x+5) */
+  const texBody=(t,V)=>{const v=[0,1].map(i=>t.e[i]>0?V[i]+(t.e[i]>1?'^{'+t.e[i]+'}':''):'').join(''),ac=Math.abs(t.c);return v?(ac===1?'':String(ac))+v:String(ac)};
+  const texFmt=(ts,V)=>ts.length?ts.map((t,i)=>(i===0?(t.c<0?'-':''):(t.c<0?'-':'+'))+texBody(t,V)).join(''):'0';
   const T=(c,e)=>({c,e});
   const num=n=>n<0?'−'+(-n):String(n);
 
@@ -1186,7 +1200,7 @@ const ALG=(()=>{
       }
       hint='Divide los coeficientes: '+num(a.c)+' ÷ '+(bb.c<0?'('+num(bb.c)+')':num(bb.c))+' = '+num(a.c/bb.c)+'. Resta los exponentes de las letras iguales: '+parts.join(', ')+'. Las letras que solo están en el de arriba se copian. Resultado: '+ans;
     }
-    return {q:shown,a:ans,h:hint,A:Aq,B:Bq,R,V,op,lv};
+    return {q:shown,a:ans,h:hint,A:Aq,B:Bq,R,V,op,lv,ql:['('+texFmt(Aq,V)+')','('+texFmt(Bq,V)+')'],al:texFmt(R,V)};
   }
   /* nueva pregunta al azar: [a, b, op] */
   function make(op,lv,hard,cm,rnd){return [lv,enc(rnd(1<<23),hard,cm),op]}
@@ -2440,13 +2454,37 @@ function histHtml(){
   (h.length?h.map(e=>'<div class="he"><small>'+esc(e.st)+'</small><div><span class="hm">'+qLabel(e)+'</span><span class="hres '+(e.ok?'ok':'bad')+'">'+(e.ok?'Bien':'Mal')+'</span></div></div>').join(''):'<p class="hsub">Cuando marques Bien o Mal, queda anotado aquí.</p>')+
   '</div><button type="button" class="btn sm block" data-act="reset-hist"'+(all.length?'':' disabled')+'>'+(S.confirmReset?'¿Seguro? Toca otra vez':'Reiniciar historial')+'</button></div>';
 }
-/* la pregunta y el resultado son texto con <sup>; las letras van en cursiva, como en el cuaderno */
+/* la pregunta y el resultado se dibujan con KaTeX (tipografía de LaTeX: letras en cursiva, números rectos, signos con su espacio).
+   Si KaTeX no carga (sin conexión la primera vez), se usa el texto de siempre con <sup>. */
 const mathI=h=>h.split(/(<[^>]+>)/).map(t=>t.charAt(0)==='<'?t:t.replace(/[a-z]/g,'<em class="v">$&</em>')).join('');
 const plainLen=h=>h.replace(/<sup>(\d+)<\/sup>/g,'^').replace(/<[^>]+>/g,'').length;
-const fsOf=n=>n<=11?'clamp(54px,10.5vw,128px)':n<=19?'clamp(42px,8vw,100px)':n<=29?'clamp(32px,5.8vw,74px)':'clamp(27px,4.6vw,60px)';
-const multHtml=q=>{const g=qgen(q);return '<div class="mult alg'+(g.op==='*'?' nm':'')+'" style="--fs:'+fsOf(plainLen(g.q))+'">'+mathI(g.q)+'</div>'};
+const fsOf=n=>n<=11?'clamp(60px,11.5vw,140px)':n<=19?'clamp(46px,8.8vw,110px)':n<=29?'clamp(34px,6.4vw,82px)':'clamp(28px,5vw,66px)';
+const K=t=>{try{return typeof katex!=='undefined'?katex.renderToString(t,{throwOnError:true,strict:'ignore'}):null}catch(e){return null}};
+const multHtml=q=>{
+  const g=qgen(q);let inner=null;
+  const a=K(g.ql[0]),b=K(g.ql[1]),o=g.op==='*'?'':K(g.op==='d'?'\\div':g.op==='-'?'-':'+');
+  if(a&&b&&(g.op==='*'||o))inner='<span class="kq">'+a+'</span>'+(o?'<span class="ko">'+o+'</span>':'')+'<span class="kq">'+b+'</span>';
+  return '<div class="mult alg'+(g.op==='*'?' nm':'')+(inner?' kx':'')+'" style="--fs:'+fsOf(plainLen(g.q))+'" data-qh="'+esc(g.q)+'">'+(inner||mathI(g.q))+'</div>';
+};
+/* ajuste al ancho: ningún paréntesis (o término) se sale de la pantalla; si no cabe, la letra se reduce lo justo */
+const fitMath=()=>{
+  document.querySelectorAll('.mult.alg.kx,.rnum.alg.kx').forEach(el=>{
+    const W=el.clientWidth;if(!W||el.dataset.fw===String(W))return;
+    el.style.fontSize='';
+    const cur=parseFloat(getComputedStyle(el).fontSize)||40;
+    let wide=0;el.querySelectorAll(el.classList.contains('mult')?'.kq':'.katex-html .base').forEach(n=>{wide=Math.max(wide,n.getBoundingClientRect().width)});
+    if(wide>W)el.style.fontSize=Math.max(14,Math.floor(cur*W/wide*.97))+'px';
+    el.dataset.fw=String(W);
+  });
+};
+(()=>{
+  let busy=0;const go=()=>{if(busy)return;busy=setTimeout(()=>{busy=0;try{fitMath()}catch(e){}},0)};
+  try{new MutationObserver(go).observe(document.getElementById('app'),{childList:true,subtree:true})}catch(e){}
+  addEventListener('resize',()=>{document.querySelectorAll('[data-fw]').forEach(n=>delete n.dataset.fw);go()});
+  try{document.fonts.addEventListener('loadingdone',()=>{document.querySelectorAll('[data-fw]').forEach(n=>delete n.dataset.fw);go()})}catch(e){}
+})();
 const timerBox=lbl=>'<div class="tbox"><div class="tlbl">'+lbl+'</div><div class="tnum" id="tnum">'+secLeft()+'</div><div class="tbar"><b id="tbar" style="width:'+(T.total?T.left/T.total*100:100)+'%"></b></div></div>';
-const resBox=q=>{const g=qgen(q);return '<div class="rbox"><div class="tlbl">Resultado</div><div class="rnum alg">'+mathI(g.a)+'</div>'+(g.h?'<div class="how"><span>Cómo se hace</span>'+g.h+'</div>':'')+'</div>'};
+const resBox=q=>{const g=qgen(q),k=K(g.al);return '<div class="rbox"><div class="tlbl">Resultado</div><div class="rnum alg'+(k?' kx':'')+'" data-ah="'+esc(g.a)+'">'+(k||mathI(g.a))+'</div>'+(g.h?'<div class="how"><span>Cómo se hace</span>'+g.h+'</div>':'')+'</div>'};
 function stageInd(){
   const q=G.q,p=G.phase==='paused';
   let h='<div class="flash '+(G.flashOk?'ok':'bad')+'" id="flash">'+esc(G.flash||'')+'</div><div class="who">'+esc(q.st)+(q.fromBag?'':' <span class="tagrep">repaso</span>')+'</div>'+nvStreak(G.nv,5,true)+multHtml(q);
@@ -2685,7 +2723,7 @@ function render(){
   else if(s==='hall')h=viewHall();
   else if(s==='report')h=viewReport();
   else if(s==='backup')h=viewBackup();
-  app.innerHTML=h;
+  app.innerHTML=h;try{fitMath()}catch(e){}
   if(s==='play'&&S.view==='play'&&G&&G.kind==='boss')bossMount();
   const key=s+(s==='play'?S.view:'');
   if(key!==lastScreen){lastScreen=key;window.scrollTo(0,0);if(s==='bracket'){const c=app.querySelector('[data-cur]');if(c&&c.scrollIntoView){c.scrollIntoView({block:'center',inline:'center'});
