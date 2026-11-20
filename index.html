@@ -151,13 +151,35 @@ h1,h2,h3,p{margin:0}
 .cnt{padding-top:22px}.cnt .fb{font-family:var(--display);font-size:28px;font-weight:600;color:var(--ok);min-height:38px}
 .cnt .turn{font-weight:600;margin-top:6px}
 .hist{border-left:1px solid var(--line);padding:20px;display:flex;flex-direction:column;gap:6px;height:100vh;position:sticky;top:0}
+.mhint{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:60;background:rgba(26,24,20,.9);color:#fff;font-size:14px;font-weight:600;padding:9px 16px;border-radius:999px;pointer-events:none;box-shadow:0 4px 16px rgba(0,0,0,.22);animation:mhin .4s ease-out;max-width:calc(100vw - 32px);text-align:center}
+@keyframes mhin{from{opacity:0;transform:translate(-50%,8px)}to{opacity:1;transform:translate(-50%,0)}}
+@media (prefers-reduced-motion:reduce){.mhint{animation:none}}
 .hsub{font-size:13px;color:var(--muted)}
+.hh2{margin:0}
+.htog{all:unset;box-sizing:border-box;display:flex;align-items:center;gap:10px;width:100%;cursor:pointer;color:inherit}
+.htog:focus-visible{outline:2px solid var(--gold);outline-offset:4px;border-radius:6px}
+.htl{font-family:var(--display);font-size:28px;font-weight:600;line-height:1.1}
+.hct{margin-left:auto;font-size:12px;font-weight:600;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:2px 9px;font-family:var(--body)}
+.hch{flex:none;width:9px;height:9px;border-right:2.5px solid var(--muted);border-bottom:2.5px solid var(--muted);transform:rotate(45deg);transition:transform .2s;margin:0 4px 3px 2px}
+.hbody{display:flex;flex-direction:column;gap:6px;flex:1;min-height:0}
+body.hclosed .hbody{display:none}
+body.hclosed .hch{transform:rotate(-45deg);margin-bottom:0}
+@media (min-width:901px){
+  .hch{transform:rotate(-45deg);margin:0 2px 0 0}
+  body.hclosed .play{grid-template-columns:minmax(0,1fr) 58px}
+  body.hclosed .hist{padding:18px 6px;align-items:center}
+  body.hclosed .htog{flex-direction:column;width:auto;gap:12px}
+  body.hclosed .htl{writing-mode:vertical-rl;font-size:20px}
+  body.hclosed .hct{margin:0}
+  body.hclosed .hch{transform:rotate(135deg);margin:0}
+}
+@media (prefers-reduced-motion:reduce){.hch{transition:none}}
 .hlist{flex:1;overflow:auto;margin:8px 0}
 .he{padding:9px 0;border-bottom:1px solid var(--line)}
 .he small{display:block;font-size:13px;color:var(--muted)}
 .he div{display:flex;justify-content:space-between;align-items:baseline}
 .hm{font-family:var(--display);font-size:20px}
-.hr{font-size:13px;font-weight:600}.hr.ok{color:var(--ok)}.hr.bad{color:var(--bad)}
+.hres{font-size:13px;font-weight:600}.hres.ok{color:var(--ok)}.hres.bad{color:var(--bad)}
 
 /* final y confeti */
 .endp{max-width:760px;margin:0 auto;padding:44px 16px 72px;text-align:center}
@@ -401,6 +423,7 @@ h1,h2,h3,p{margin:0}
 @media (max-width:900px){
   .play{grid-template-columns:1fr}
   .hist{border-left:0;border-top:1px solid var(--line);position:static;height:auto;max-height:420px}
+  body.hclosed .hist{max-height:none;padding:12px 20px}
   .top{grid-template-columns:1fr}.top .clk{order:-1}.top .r{justify-content:flex-start}
   .top2{grid-template-columns:1fr}.top2 .r{justify-content:flex-start}
   .bn-cards{display:none}
@@ -544,7 +567,7 @@ const KEY='lemates271.v1';
 let DB={};
 try{DB=JSON.parse(localStorage.getItem(KEY)||'{}')||{}}catch(e){DB={}}
 DB.libre=DB.libre||'';DB.classes=DB.classes||{};DB.hist=DB.hist||{};DB.rep=DB.rep||{};DB.tour=DB.tour||{};DB.abs=DB.abs||{};DB.hall=DB.hall||{};
-DB.prefs=Object.assign({mute:false,music:true,tables:TABLES.slice(),secs:15,op:'mul',max:20},DB.prefs||{});
+DB.prefs=Object.assign({mute:false,music:true,hist:false,tables:TABLES.slice(),secs:15,op:'mul',max:20},DB.prefs||{});
 const save=()=>{try{DB.mt=Date.now();const o=Object.assign({},DB);o.classes={};Object.keys(DB.classes).forEach(k=>{const c=DB.classes[k];o.classes[k]=c&&c.enc?Object.assign({},c,{names:[]}):c});localStorage.setItem(KEY,JSON.stringify(o))}catch(e){}try{gSoon()}catch(e){}};
 function parseNames(t){const seen=new Set(),out=[];String(t||'').split(/\r?\n/).forEach(l=>{const n=l.replace(/\s+/g,' ').trim();if(!n)return;const k=n.toLowerCase();if(seen.has(k))return;seen.add(k);out.push(n)});return out.slice(0,200)}
 async function sha(s){try{const d=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s));return Array.from(new Uint8Array(d)).map(x=>x.toString(16).padStart(2,'0')).join('')}catch(e){let h=0;for(const c of s)h=(h*31+c.charCodeAt(0))|0;return 'x'+h}}
@@ -818,7 +841,7 @@ const MUSIC=(()=>{
    Respeta «Silencio» y el botón «Música», se pausa con la pestaña oculta y espera al primer toque (los navegadores lo exigen). */
 const MUS=(()=>{
   const TRIM={xmas:.6,calm:.6,b1:.42,b2:.38,b3:.36,tour:.5,win:.5,lose:.5};   /* niveles medidos: la música queda ~6 dB por debajo de los efectos */
-  let bus=null,cur=null,name='',hidden=false,lastDuck=0,stung=null;
+  let bus=null,cur=null,name='',hidden=!!document.hidden,lastDuck=0,stung=null;
   const setName=v=>{name=v;try{document.documentElement.dataset.music=v}catch(e){}};   /* lo que suena, visible en <html data-music> */
   const on=()=>DB.prefs.music!==false;
   function want(){
@@ -838,8 +861,20 @@ const MUS=(()=>{
     bus=AC.createGain();bus.gain.value=1;bus.connect(AC.destination);
     try{AC.onstatechange=()=>sync()}catch(e){}
   }
+  function hint(){                                                   /* si el navegador no deja sonar todavía, avisa cómo activarla */
+    try{
+      const need=!!(AC&&AC.state!=='running'&&want()),el=document.getElementById('musHint');
+      if(need&&!el){const n=document.createElement('div');n.id='musHint';n.className='mhint';n.setAttribute('role','status');n.textContent='♪ Toca la pantalla para activar la música';document.body.appendChild(n)}
+      else if(!need&&el)el.remove();
+    }catch(e){}
+  }
+  function boot(){                                                   /* al abrir el link: intenta empezar ya; si el navegador lo bloquea, espera al primer toque */
+    try{if(want()){audio();AC.onstatechange=()=>sync()}}catch(e){}
+    sync();
+  }
   function sync(){
     try{
+      hint();
       if(!AC||AC.state!=='running')return;
       const w=want();
       if(w===name)return;
@@ -873,7 +908,7 @@ const MUS=(()=>{
     if(hidden&&cur){cur.stop(.15);cur=null;setName('')}
     sync();
   });
-  return {sync,duck,want,now:()=>name,get playing(){return !!cur}};
+  return {boot,sync,duck,want,now:()=>name,get playing(){return !!cur}};
 })();
 const musBtn=()=>'<button type="button" class="btn sm" data-act="music" aria-pressed="'+(DB.prefs.music!==false)+'">Música: '+(DB.prefs.music!==false?'sí':'no')+'</button>';
 
@@ -1921,7 +1956,7 @@ function applyBackup(db){
   Object.assign(DB,db);
   DB.libre=typeof DB.libre==='string'?DB.libre:'';
   ['classes','hist','rep','tour','abs','hall'].forEach(k=>{if(!DB[k]||typeof DB[k]!=='object'||Array.isArray(DB[k]))DB[k]={}});
-  DB.prefs=Object.assign({mute:false,music:true,tables:TABLES.slice(),secs:15,op:'mul',max:20},DB.prefs||{});
+  DB.prefs=Object.assign({mute:false,music:true,hist:false,tables:TABLES.slice(),secs:15,op:'mul',max:20},DB.prefs||{});
   seedRosters();
   CLASSES.forEach(k=>{const cur=DB.classes[k.id];if(cur&&cur.enc&&ROSTER_OPEN[k.id])cur.names=ROSTER_OPEN[k.id]});
   save();
@@ -2199,9 +2234,9 @@ function topBar(left){
 }
 function histHtml(){
   const c=S.course,all=histOf(c),h=all.slice(-60).reverse(),rp=repOf(c).length;
-  return '<h2 class="h2" style="font-size:28px">Historial</h2><p class="hsub">'+(rp?rp+' por repasar':'Sin repasos')+'</p><div class="hlist">'+
-  (h.length?h.map(e=>'<div class="he"><small>'+esc(e.st)+'</small><div><span class="hm">'+qLabel(e)+'</span><span class="hr '+(e.ok?'ok':'bad')+'">'+(e.ok?'Bien':'Mal')+'</span></div></div>').join(''):'<p class="hsub">Cuando marques Bien o Mal, queda anotado aquí.</p>')+
-  '</div><button type="button" class="btn sm block" data-act="reset-hist"'+(all.length?'':' disabled')+'>'+(S.confirmReset?'¿Seguro? Toca otra vez':'Reiniciar historial')+'</button>';
+  return '<h2 class="h2 hh2"><button type="button" class="htog" data-act="hist-toggle" aria-expanded="'+!!DB.prefs.hist+'" aria-controls="hbody"><span class="hch" aria-hidden="true"></span><span class="htl">Historial</span>'+(all.length?'<span class="hct" title="Respuestas anotadas">'+all.length+'</span>':'')+'</button></h2><div class="hbody" id="hbody"><p class="hsub">'+(rp?rp+' por repasar':'Sin repasos')+'</p><div class="hlist">'+
+  (h.length?h.map(e=>'<div class="he"><small>'+esc(e.st)+'</small><div><span class="hm">'+qLabel(e)+'</span><span class="hres '+(e.ok?'ok':'bad')+'">'+(e.ok?'Bien':'Mal')+'</span></div></div>').join(''):'<p class="hsub">Cuando marques Bien o Mal, queda anotado aquí.</p>')+
+  '</div><button type="button" class="btn sm block" data-act="reset-hist"'+(all.length?'':' disabled')+'>'+(S.confirmReset?'¿Seguro? Toca otra vez':'Reiniciar historial')+'</button></div>';
 }
 const blank='<span class="blank" aria-label="número que falta">?</span>';
 const swp=q=>q.op==='f'&&((q.a+q.b)&1)===1;
@@ -2450,6 +2485,7 @@ function render(){
     if(k&&cell&&k.scrollWidth>k.clientWidth){const step=cell.offsetWidth+parseFloat(getComputedStyle(k).getPropertyValue('--g')||0);k.scrollLeft=Math.max(0,cell.offsetLeft-step-16)}}}}
   if(s==='lock'||s==='edit'){const f=$('#pw')||$('#rost');if(f)f.focus()}
   const finished=(s==='play'&&S.view==='play'&&G&&G.phase==='end'&&(G.kind!=='boss'||G.won))||(s==='bracket'&&TR&&TR.cur===null);
+  document.body.classList.toggle('hclosed',!DB.prefs.hist);
   if(NAVIDAD)document.body.classList.toggle('nv-snow',s==='home'||!!finished);
   if(finished)confetti();
   try{MUS.sync()}catch(e){}
@@ -2544,6 +2580,7 @@ function act(a,d){
     }
     case 'mute':DB.prefs.mute=!DB.prefs.mute;save();render();break;
     case 'music':DB.prefs.music=DB.prefs.music===false;save();render();break;
+    case 'hist-toggle':{DB.prefs.hist=!DB.prefs.hist;save();document.body.classList.toggle('hclosed',!DB.prefs.hist);const hb=document.querySelector('.htog');if(hb)hb.setAttribute('aria-expanded',String(!!DB.prefs.hist));break}
     case 'bien':if(G.kind==='ind')indMark(true);else if(G.kind==='boss')bossMark(true);else tmMark(true);break;
     case 'mal':if(G.kind==='ind')indMark(false);else if(G.kind==='boss')bossMark(false);else tmMark(false);break;
     case 'reveal':if(G.kind==='boss')bossReveal();else indReveal();break;
@@ -2673,7 +2710,7 @@ document.addEventListener('keydown',e=>{
 });
 
 /* ================= arranque ================= */
-const boot=()=>{nvBoot();render()};
+const boot=()=>{nvBoot();render();MUS.boot()};
 if(window.claude&&window.claude.hot&&window.claude.hot.snapshot)window.claude.hot.snapshot(()=>({}));
 if(window.claude&&window.claude.hot&&window.claude.hot.ready)window.claude.hot.ready(boot);else boot();
 })();
