@@ -544,7 +544,7 @@ const KEY='lemates271.v1';
 let DB={};
 try{DB=JSON.parse(localStorage.getItem(KEY)||'{}')||{}}catch(e){DB={}}
 DB.libre=DB.libre||'';DB.classes=DB.classes||{};DB.hist=DB.hist||{};DB.rep=DB.rep||{};DB.tour=DB.tour||{};DB.abs=DB.abs||{};DB.hall=DB.hall||{};
-DB.prefs=Object.assign({mute:false,tables:TABLES.slice(),secs:15,op:'mul',max:20},DB.prefs||{});
+DB.prefs=Object.assign({mute:false,music:true,tables:TABLES.slice(),secs:15,op:'mul',max:20},DB.prefs||{});
 const save=()=>{try{DB.mt=Date.now();const o=Object.assign({},DB);o.classes={};Object.keys(DB.classes).forEach(k=>{const c=DB.classes[k];o.classes[k]=c&&c.enc?Object.assign({},c,{names:[]}):c});localStorage.setItem(KEY,JSON.stringify(o))}catch(e){}try{gSoon()}catch(e){}};
 function parseNames(t){const seen=new Set(),out=[];String(t||'').split(/\r?\n/).forEach(l=>{const n=l.replace(/\s+/g,' ').trim();if(!n)return;const k=n.toLowerCase();if(seen.has(k))return;seen.add(k);out.push(n)});return out.slice(0,200)}
 async function sha(s){try{const d=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s));return Array.from(new Uint8Array(d)).map(x=>x.toString(16).padStart(2,'0')).join('')}catch(e){let h=0;for(const c of s)h=(h*31+c.charCodeAt(0))|0;return 'x'+h}}
@@ -583,11 +583,11 @@ const lst=a=>a.length>1?a.slice(0,-1).join(', ')+' y '+a[a.length-1]:(a[0]===und
 
 /* ================= sonido ================= */
 let AC=null;
+function audio(){AC=AC||new (window.AudioContext||window.webkitAudioContext)();if(AC.state==='suspended')AC.resume();return AC}
 function beep(f,d,type,vol,when){
   if(DB.prefs.mute)return;
   try{
-    AC=AC||new (window.AudioContext||window.webkitAudioContext)();
-    if(AC.state==='suspended')AC.resume();
+    audio();MUS.duck();
     const t0=AC.currentTime+(when||0),o=AC.createOscillator(),g=AC.createGain();
     o.type=type||'sine';o.frequency.value=f;
     g.gain.setValueAtTime(vol||.08,t0);g.gain.exponentialRampToValueAtTime(.0001,t0+d);
@@ -607,6 +607,275 @@ const snd={
   boom(){beep(110,.7,'sawtooth',.1);beep(70,.9,'square',.08,.08);[523,659,784,1047].forEach((f,i)=>beep(f,.28,'triangle',.07,.5+i*.15))},
   laugh(){[420,380,420,380,300].forEach((f,i)=>beep(f,.12,'square',.05,i*.14))}
 };
+
+/* ================= MÚSICA =================
+   Todo se genera con WebAudio: sin archivos, sin derechos de autor y casi sin peso.
+   · MUSIC  = motor: voces suaves, canciones escritas como datos y un programador por adelantado (no toca la página).
+   · MUS    = control: decide qué suena según la pantalla; respeta «Silencio», el botón «Música», la pestaña oculta y el primer toque.
+   Villancicos: melodías tradicionales de dominio público (Noche de paz, Deck the Halls, Jingle Bells). El resto es original. */
+/* MUSIC:inicio */
+const MUSIC=(()=>{
+  const PC={C:0,D:2,E:4,F:5,G:7,A:9,B:11};
+  const mid=n=>{const m=/^([A-G])([#b]?)(-?\d)$/.exec(n);if(!m)throw new Error('nota inválida: '+n);return 12*(+m[3]+1)+PC[m[1]]+(m[2]==='#'?1:m[2]==='b'?-1:0)};
+  const hz=m=>440*Math.pow(2,(m-69)/12);
+  /* «G4:1.5 A4:.5 r:1 E4» → [[midi|null, pulsos], …]; si no trae duración repite la anterior; r = silencio */
+  const seq=s=>{let d=1;return s.trim().split(/\s+/).map(t=>{const p=t.split(':');if(p[1]!==undefined)d=+p[1];return [p[0]==='r'?null:mid(p[0]),d]})};
+  /* acordes: [fundamental, tercera, quinta(, séptima)] */
+  const CH={C:[48,52,55],Am:[45,48,52],F:[41,45,48],G:[43,47,50],G7:[43,47,50,53],E:[40,44,47],D:[50,54,57],A:[45,49,52],Bm:[47,50,54]};
+
+  /* ---------- voces (todas suaves) ---------- */
+  const WN=new WeakMap();
+  const noiseOf=ac=>{let b=WN.get(ac);if(!b){b=ac.createBuffer(1,ac.sampleRate,ac.sampleRate);const d=b.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1;WN.set(ac,b)}return b};
+  function tone(ac,out,type,f,t,len,peak,att){        /* un tono con ataque y caída exponencial */
+    const o=ac.createOscillator(),g=ac.createGain();
+    o.type=type;o.frequency.setValueAtTime(f,t);
+    g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(Math.max(peak,.0002),t+att);g.gain.exponentialRampToValueAtTime(.0001,t+att+len);
+    o.connect(g);g.connect(out);o.start(t);o.stop(t+att+len+.05);
+  }
+  function hit(ac,out,t,len,peak,type,freq,q){          /* golpe de ruido filtrado (platillos, caja, cascabeles) */
+    const s=ac.createBufferSource(),f=ac.createBiquadFilter(),g=ac.createGain();
+    s.buffer=noiseOf(ac);f.type=type;f.frequency.value=freq;f.Q.value=q;
+    g.gain.setValueAtTime(Math.max(peak,.0002),t);g.gain.exponentialRampToValueAtTime(.0001,t+len);
+    s.connect(f);f.connect(g);g.connect(out);s.start(t,Math.random()*.8);s.stop(t+len+.02);
+  }
+  const V={
+    bell(ac,o,t,m,d,a){const f=hz(m),L=Math.min(2.6,.6+d*1.2);tone(ac,o,'sine',f,t,L,a,.004);tone(ac,o,'sine',f*2,t,L*.4,a*.3,.003);tone(ac,o,'sine',f*5.04,t,L*.1,a*.06,.002)},
+    pluck(ac,o,t,m,d,a){
+      const f=hz(m),x=ac.createOscillator(),lp=ac.createBiquadFilter(),g=ac.createGain(),L=Math.min(1.4,.25+d*.5);
+      x.type='sawtooth';x.frequency.setValueAtTime(f,t);lp.type='lowpass';lp.Q.value=.7;
+      lp.frequency.setValueAtTime(Math.min(6000,f*6),t);lp.frequency.exponentialRampToValueAtTime(Math.max(260,f*1.3),t+L*.7);
+      g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(Math.max(a,.0002),t+.006);g.gain.exponentialRampToValueAtTime(.0001,t+L);
+      x.connect(lp);lp.connect(g);g.connect(o);x.start(t);x.stop(t+L+.05);
+    },
+    bass(ac,o,t,m,d,a){const f=hz(m),L=Math.min(1,.2+d*.6);tone(ac,o,'sine',f,t,L,a,.01);tone(ac,o,'sine',f*2,t,L*.7,a*.35,.01)},
+    pad(ac,o,t,m,d,a){
+      const f=hz(m),end=t+d+.5,g=ac.createGain(),lp=ac.createBiquadFilter(),up=Math.min(.6,d*.4);
+      lp.type='lowpass';lp.frequency.value=Math.min(2400,f*4);
+      g.gain.setValueAtTime(.0001,t);g.gain.linearRampToValueAtTime(a,t+up);g.gain.setValueAtTime(a,Math.max(t+up,t+d-.1));g.gain.linearRampToValueAtTime(.0001,end);
+      [-6,6].forEach(c=>{const x=ac.createOscillator();x.type='triangle';x.frequency.setValueAtTime(f,t);x.detune.value=c;x.connect(lp);x.start(t);x.stop(end+.05)});
+      lp.connect(g);g.connect(o);
+    },
+    brass(ac,o,t,m,d,a){
+      const f=hz(m),end=t+Math.max(d,.12),g=ac.createGain(),lp=ac.createBiquadFilter();
+      lp.type='lowpass';lp.Q.value=.8;lp.frequency.setValueAtTime(f*1.6,t);lp.frequency.linearRampToValueAtTime(Math.min(4200,f*4.2),t+.09);
+      g.gain.setValueAtTime(.0001,t);g.gain.linearRampToValueAtTime(a,t+.035);g.gain.setValueAtTime(a,end-.07);g.gain.exponentialRampToValueAtTime(.0001,end+.1);
+      [-7,7].forEach(c=>{const x=ac.createOscillator();x.type='sawtooth';x.frequency.setValueAtTime(f,t);x.detune.value=c;x.connect(lp);x.start(t);x.stop(end+.15)});
+      lp.connect(g);g.connect(o);
+    },
+    kick(ac,o,t,m,d,a){const x=ac.createOscillator(),g=ac.createGain();x.frequency.setValueAtTime(130,t);x.frequency.exponentialRampToValueAtTime(42,t+.13);g.gain.setValueAtTime(a,t);g.gain.exponentialRampToValueAtTime(.0001,t+.24);x.connect(g);g.connect(o);x.start(t);x.stop(t+.26)},
+    snare(ac,o,t,m,d,a){hit(ac,o,t,.13,a,'bandpass',1900,.8);tone(ac,o,'triangle',190,t,.08,a*.5,.002)},
+    hat(ac,o,t,m,d,a){hit(ac,o,t,.04,a,'highpass',7500,.7)},
+    shaker(ac,o,t,m,d,a){hit(ac,o,t,.07,a,'bandpass',6200,1.2)}
+  };
+
+  /* ---------- canciones: eventos {t,d,m,v,a,r} en segundos; r = papel (mel, acc, pad, bass, drum, arp) ---------- */
+  function Song(bpm){
+    const S=60/bpm,ev=[];
+    return {bpm,ev,
+      add(b,d,m,v,a,r){ev.push({t:b*S,d:d*S,m,v,a,r:r||v})},
+      line(b,list,v,a,r,sh){for(const n of list){if(n[0]!=null)this.add(b,n[1],n[0]+(sh||0),v,a,r);b+=n[1]}return b},
+      fin(beats){ev.sort((x,y)=>x.t-y.t);return {ev,len:beats*S}}};
+  }
+  const chain=(parts,gap)=>{let off=0;const ev=[];for(const p of parts){p.ev.forEach(e=>ev.push(Object.assign({},e,{t:e.t+off})));off+=p.len+gap}ev.sort((x,y)=>x.t-y.t);return {ev,len:off}};
+
+  /* villancico: melodía de campanita + acompañamiento de arpa y bajo muy suaves */
+  function tune(o){
+    const s=Song(o.bpm),m=o.meter,notes=seq(o.mel),beats=notes.reduce((x,n)=>x+n[1],0),bars=Math.ceil(beats/m-1e-9);
+    s.line(0,notes,'bell',o.a||.2,'mel',o.shift||0);
+    for(let i=0;i<bars;i++){
+      const c=CH[o.chords[Math.min(i,o.chords.length-1)]],b=i*m;
+      c.slice(0,3).forEach(n=>s.add(b,m,n+12,'pad',.016,'pad'));
+      if(m===3){
+        s.add(b,2,c[0]-12,'bass',.1,'bass');
+        [1,2].forEach(k=>{s.add(b+k,1,c[1],'pluck',.05,'acc');s.add(b+k,1,c[2],'pluck',.04,'acc')});
+      }else{
+        s.add(b,1.5,c[0]-12,'bass',.1,'bass');s.add(b+2,1.5,c[2]-12,'bass',.07,'bass');
+        [1,3].forEach(k=>{s.add(b+k,1,c[1],'pluck',.05,'acc');s.add(b+k,1,c[2],'pluck',.04,'acc')});
+      }
+      if(o.shaker)for(let k=0;k<m*2;k++)s.add(b+k/2,.25,0,'shaker',k%2?.011:.018,'drum');
+    }
+    return s.fin(bars*m);
+  }
+  const SILENT={bpm:60,meter:3,a:.2,
+    mel:'G4:1.5 A4:.5 G4:1 E4:3 G4:1.5 A4:.5 G4:1 E4:3 D5:2 D5:1 B4:3 C5:2 C5:1 G4:3 A4:2 A4:1 C5:1.5 B4:.5 A4:1 G4:1.5 A4:.5 G4:1 E4:3 A4:2 A4:1 C5:1.5 B4:.5 A4:1 G4:1.5 A4:.5 G4:1 E4:3 D5:2 D5:1 F5:1.5 D5:.5 B4:1 C5:3 E5:3 C5:1 G4:1 E4:1 G4:1.5 F4:.5 D4:1 C4:3',
+    chords:['C','C','C','C','G','G7','C','C','F','F','C','C','F','F','C','C','G','G7','C','C','C','G7','C']};
+  const DECK={bpm:104,meter:4,a:.2,shift:-12,
+    mel:'G5:1.5 F5:.5 E5:1 D5:1 C5:1 D5:1 E5:1 C5:1 D5:.5 E5:.5 F5:.5 D5:.5 E5:1.5 D5:.5 C5:1 B4:1 C5:2 D5:1.5 E5:.5 F5:1 D5:1 E5:1.5 F5:.5 G5:1 D5:1 E5:.5 F#5:.5 G5:1 A5:.5 B5:.5 C6:1 B5:1 A5:1 G5:2 G5:1.5 F5:.5 E5:1 D5:1 C5:1 D5:1 E5:1 C5:1 A5:.5 A5:.5 A5:.5 A5:.5 G5:1.5 F5:.5 E5:1 D5:1 C5:2',
+    chords:['C','Am','G7','C','G7','C','C','G','C','Am','F','C']};
+  const JINGLE={bpm:116,meter:4,a:.2,shift:-12,shaker:true,
+    mel:'E5:1 E5:1 E5:2 E5:1 E5:1 E5:2 E5:1 G5:1 C5:1.5 D5:.5 E5:4 F5:1 F5:1 F5:1.5 F5:.5 F5:1 E5:1 E5:1 E5:.5 E5:.5 E5:1 D5:1 D5:1 E5:1 D5:2 G5:2 E5:1 E5:1 E5:2 E5:1 E5:1 E5:2 E5:1 G5:1 C5:1.5 D5:.5 E5:4 F5:1 F5:1 F5:1.5 F5:.5 F5:1 E5:1 E5:1 E5:.5 E5:.5 G5:1 G5:1 F5:1 D5:1 C5:4',
+    chords:['C','C','C','C','F','C','C','G7','C','C','C','C','F','C','G7','C']};
+  /* respaldo sin Navidad: nana original de caja de música */
+  const CALM={bpm:72,meter:4,a:.16,shift:-12,
+    mel:'E5:1 G5:1 E5:1 C5:1 A4:2 E5:2 F5:1 A5:1 C6:1 A5:1 G5:1 D5:1 B4:2 E5:1 G5:1 C6:1 G5:1 A5:1 E5:1 C5:2 A5:1 F5:1 C5:1 F5:1 D5:1 B4:1 G4:2',
+    chords:['C','Am','F','G','C','Am','F','G']};
+
+  /* batalla contra el jefe (original, La menor): misma progresión y tema en las tres fases; cambian el tempo y las capas */
+  function battle(lv){
+    const bpm=[92,112,132][lv-1],s=Song(bpm),ch=['Am','Am','F','F','G','G','E','E'];
+    const R={Am:45,F:41,G:43,E:40},T={Am:[57,60,64],F:[53,57,60],G:[55,59,62],E:[52,56,59]};
+    const pa=[.05,.06,.07][lv-1],ba=[.15,.13,.14][lv-1];
+    for(let i=0;i<8;i++){
+      const c=ch[i],b=i*4,r=R[c],tr=T[c];
+      if(i%2===0)tr.forEach(n=>s.add(b,8,n,'pad',pa,'pad'));
+      if(lv===1){s.add(b,2,r,'bass',ba,'bass');s.add(b+2,2,r,'bass',ba*.8,'bass')}
+      else{const pat=lv===2?[0,0,0,0,0,0,0,0]:[0,0,12,0,0,0,12,7];for(let k=0;k<8;k++)s.add(b+k/2,.5,r+pat[k],'bass',ba*(k%2?.7:1),'bass')}
+      const up=[tr[0]+12,tr[1]+12,tr[2]+12,tr[1]+12];
+      if(lv===1){for(let k=0;k<4;k++)s.add(b+k,1,up[k],'pluck',.05,'arp')}
+      else if(lv===2){for(let k=0;k<8;k++)s.add(b+k/2,.5,up[k%4],'pluck',.055,'arp')}
+      else{for(let k=0;k<16;k++)s.add(b+k/4,.25,up[k%4]+(k%8>=4?12:0),'pluck',.045,'arp')}
+      if(lv===1){[0,2].forEach(k=>s.add(b+k,.5,0,'kick',.2,'drum'));for(let k=0;k<4;k++)s.add(b+k+.5,.2,0,'hat',.016,'drum')}
+      else if(lv===2){[0,2].forEach(k=>s.add(b+k,.5,0,'kick',.24,'drum'));[1,3].forEach(k=>s.add(b+k,.3,0,'snare',.06,'drum'));for(let k=0;k<8;k++)s.add(b+k/2,.2,0,'hat',k%2?.011:.018,'drum')}
+      else{[0,1,2,3].forEach(k=>s.add(b+k,.5,0,'kick',.24,'drum'));[1,3].forEach(k=>s.add(b+k,.3,0,'snare',.08,'drum'));for(let k=0;k<16;k++)s.add(b+k/4,.15,0,'hat',k%4?.009:.016,'drum')}
+    }
+    const lead=seq('A4:1 C5 E5 A5 G5 E5 C5 E5 F5 A5 C6 A5 G5 F5 E5:2 G5:1 B5 D6 B5 A5:1 G5 E5 D5 E5 G#5 B5 G#5 A5 G#5 E5:2');
+    if(lv===1)s.line(0,lead,'bell',.07,'mel');
+    else if(lv===2){s.line(0,lead,'brass',.05,'mel');s.line(0,lead,'bell',.05,'mel')}
+    else{s.line(0,lead,'brass',.065,'mel');s.line(0,lead,'bell',.055,'mel');s.line(0,lead,'brass',.035,'mel',-12)}
+    return s.fin(32);
+  }
+  /* tema del torneo (original, Re mayor): marcha alegre y suave para la pantalla del cuadro */
+  function tourn(){
+    const s=Song(108),ch=['D','A','Bm','G','D','A','G','A'],R={D:38,A:45,Bm:47,G:43},T={D:[62,66,69],A:[57,61,64],Bm:[59,62,66],G:[55,59,62]};
+    for(let i=0;i<8;i++){
+      const c=ch[i],b=i*4,r=R[c],tr=T[c];
+      tr.forEach(n=>s.add(b,4,n,'pad',.03,'pad'));
+      s.add(b,1.5,r,'bass',.13,'bass');s.add(b+2,1.5,c==='D'?r+7:r,'bass',.1,'bass');
+      [1,3].forEach(k=>tr.forEach(n=>s.add(b+k,.5,n,'pluck',.035,'acc')));
+      [0,2].forEach(k=>s.add(b+k,.5,0,'kick',.16,'drum'));[1,3].forEach(k=>s.add(b+k,.3,0,'snare',.045,'drum'));
+      for(let k=0;k<8;k++)s.add(b+k/2,.2,0,'hat',k%2?.008:.013,'drum');
+    }
+    const lead=seq('D5:.5 F#5:.5 A5:1 D6:1.5 A5:.5 C#6:1 A5:1 E5:2 D6:.5 B5:.5 F#5:1 B5:1.5 F#5:.5 G5:1 B5:1 D6:2 A5:1 F#5:1 D5:1 F#5:1 E5:.5 A5:.5 C#6:1 A5:1 E5:1 D6:1 B5:1 G5:1 B5:1 C#6:1 A5:1 E5:2');
+    s.line(0,lead,'brass',.06,'mel');s.line(0,lead,'bell',.055,'mel');
+    return s.fin(32);
+  }
+  /* remates de la pelea: se tocan una sola vez */
+  function sting(win){
+    const s=Song(win?120:76);
+    if(win){
+      s.line(0,seq('C5:.25 E5 G5 C6:.5'),'bell',.13,'mel');
+      [60,64,67,72,76].forEach(n=>s.add(1.25,2.5,n,'brass',.05,'mel'));
+      s.line(1.25,seq('G5:.25 C6 E6 G6:1.5'),'bell',.09,'mel');
+      s.add(1.25,.5,0,'kick',.2,'drum');
+      return s.fin(5);
+    }
+    s.add(0,.5,0,'kick',.22,'drum');
+    [45,52,57].forEach(n=>s.add(0,6,n,'pad',.06,'pad'));
+    s.add(0,3,33,'bass',.14,'bass');
+    s.line(.25,seq('E5:.75 D5 C5 B4 A4:2.5'),'bell',.11,'mel');
+    return s.fin(5);
+  }
+
+  const BUILD={xmas:()=>chain([tune(DECK),tune(SILENT),tune(JINGLE)],3.5),calm:()=>tune(CALM),b1:()=>battle(1),b2:()=>battle(2),b3:()=>battle(3),tour:tourn,win:()=>sting(true),lose:()=>sting(false)};
+  const ONCE={win:1,lose:1},cache={};
+  const song=n=>cache[n]||(cache[n]=BUILD[n]());
+
+  /* ---------- programador: coloca las notas un poco antes de que toquen ---------- */
+  function play(ac,dest,name,opt){
+    opt=opt||{};
+    const sg=song(name),loop=!ONCE[name],when=ac.currentTime+.06+(opt.delay||0),fade=opt.fade==null?1:opt.fade;
+    const inn=ac.createGain(),outg=ac.createGain();
+    inn.gain.setValueAtTime(.0001,when);inn.gain.linearRampToValueAtTime(1,when+Math.max(.02,fade));
+    inn.connect(outg);outg.connect(dest);
+    let i=0,base=when,done=false,timer=0;
+    const pump=()=>{
+      if(done)return;
+      const now=ac.currentTime,horizon=now+1.4;
+      for(;;){
+        const e=sg.ev[i];
+        if(!e){if(!loop){done=true;clearInterval(timer);return}i=0;base+=sg.len;continue}
+        const t=base+e.t;
+        if(t>horizon)return;
+        if(t>=now-.02)V[e.v](ac,inn,Math.max(t,now),e.m,e.d,e.a);
+        i++;
+      }
+    };
+    pump();timer=setInterval(pump,300);
+    return {name,stop(fo){
+      done=true;clearInterval(timer);fo=fo==null?.8:fo;
+      const n=ac.currentTime;outg.gain.cancelScheduledValues(n);outg.gain.setValueAtTime(1,n);outg.gain.linearRampToValueAtTime(.0001,n+fo);
+      setTimeout(()=>{try{outg.disconnect()}catch(e){}},fo*1000+200);
+    }};
+  }
+  /* para pruebas: coloca todos los eventos de una canción (o de un papel) en un contexto sin conexión */
+  function renderTo(ac,dest,name,secs,roles,only){
+    const sg=song(name);let k=0;
+    for(let base=0;base<secs;base+=sg.len)for(const e of sg.ev){
+      const t=base+e.t;if(t>=secs)break;
+      if(roles&&roles.indexOf(e.r)<0)continue;
+      V[only||e.v](ac,dest,t,e.m,e.d,e.a);k++;
+    }
+    return k;
+  }
+  return {mid,hz,seq,song,play,renderTo,V,CH,TUNES:{SILENT,DECK,JINGLE,CALM},names:Object.keys(BUILD)};
+})();
+/* MUSIC:fin */
+/* MUS: decide qué suena según la pantalla. Todo en try/catch: la música nunca debe romper el juego.
+   · Navegando (inicio, clave, listas, preparación, salón, reporte, respaldo) → villancicos.
+   · Torneo, pantalla del cuadro → tema de torneo; al empezar un duelo se calla.
+   · Jefe → batalla suave que sube de intensidad con cada fase (1, 2, 3); al final, fanfarria o derrota una sola vez.
+   · Resto de juegos → silencio.
+   Respeta «Silencio» y el botón «Música», se pausa con la pestaña oculta y espera al primer toque (los navegadores lo exigen). */
+const MUS=(()=>{
+  const TRIM={xmas:.6,calm:.6,b1:.42,b2:.38,b3:.36,tour:.5,win:.5,lose:.5};   /* niveles medidos: la música queda ~6 dB por debajo de los efectos */
+  let bus=null,cur=null,name='',hidden=false,lastDuck=0,stung=null;
+  const setName=v=>{name=v;try{document.documentElement.dataset.music=v}catch(e){}};   /* lo que suena, visible en <html data-music> */
+  const on=()=>DB.prefs.music!==false;
+  function want(){
+    if(DB.prefs.mute||!on()||hidden)return '';
+    const s=S.screen;
+    if(s==='play'){
+      if(!G||G.kind!=='boss')return '';
+      if(G.phase==='end')return G.won===true?'win':G.won===false?'lose':'';
+      return 'b'+Math.min(3,Math.max(1,G.ph||1));
+    }
+    if(s==='duel')return '';
+    if(s==='bracket')return 'tour';
+    return NAVIDAD?'xmas':'calm';
+  }
+  function open(){
+    if(bus&&bus.context===AC)return;
+    bus=AC.createGain();bus.gain.value=1;bus.connect(AC.destination);
+    try{AC.onstatechange=()=>sync()}catch(e){}
+  }
+  function sync(){
+    try{
+      if(!AC||AC.state!=='running')return;
+      const w=want();
+      if(w===name)return;
+      if(cur){cur.stop(w?.6:.9);cur=null}
+      setName(w);
+      if(!w)return;
+      const once=w==='win'||w==='lose';
+      if(once){if(stung===G){setName('');return}stung=G}
+      open();
+      const tg=AC.createGain();tg.gain.value=TRIM[w]||.5;tg.connect(bus);
+      cur=MUSIC.play(AC,tg,w,{fade:once?.05:.8,delay:once?1.5:0});   /* la fanfarria espera a que terminen los efectos */
+    }catch(e){}
+  }
+  function duck(){                                                     /* baja la música un instante cuando suena un efecto */
+    try{
+      if(!bus||!cur||!AC)return;
+      const n=AC.currentTime;if(n-lastDuck<.08)return;lastDuck=n;
+      const g=bus.gain;g.cancelScheduledValues(n);g.setTargetAtTime(.5,n,.02);g.setTargetAtTime(1,n+.45,.25);
+    }catch(e){}
+  }
+  function unlock(){
+    try{
+      const a=audio();
+      if(a.state!=='running'){const p=a.resume();if(p&&p.then)p.then(sync,()=>{})}
+      sync();
+    }catch(e){}
+  }
+  ['pointerdown','touchend','keydown'].forEach(ev=>addEventListener(ev,unlock,{capture:true,passive:true}));
+  document.addEventListener('visibilitychange',()=>{
+    hidden=document.hidden;
+    if(hidden&&cur){cur.stop(.15);cur=null;setName('')}
+    sync();
+  });
+  return {sync,duck,want,now:()=>name,get playing(){return !!cur}};
+})();
+const musBtn=()=>'<button type="button" class="btn sm" data-act="music" aria-pressed="'+(DB.prefs.music!==false)+'">Música: '+(DB.prefs.music!==false?'sí':'no')+'</button>';
 
 /* ================= temporizador ================= */
 const T={total:0,left:0,elapsed:0,on:false,last:0,id:0,end:null,tk:-1};
@@ -1630,7 +1899,7 @@ function applyBackup(db){
   Object.assign(DB,db);
   DB.libre=typeof DB.libre==='string'?DB.libre:'';
   ['classes','hist','rep','tour','abs','hall'].forEach(k=>{if(!DB[k]||typeof DB[k]!=='object'||Array.isArray(DB[k]))DB[k]={}});
-  DB.prefs=Object.assign({mute:false,tables:TABLES.slice(),secs:15,op:'mul',max:20},DB.prefs||{});
+  DB.prefs=Object.assign({mute:false,music:true,tables:TABLES.slice(),secs:15,op:'mul',max:20},DB.prefs||{});
   seedRosters();
   CLASSES.forEach(k=>{const cur=DB.classes[k.id];if(cur&&cur.enc&&ROSTER_OPEN[k.id])cur.names=ROSTER_OPEN[k.id]});
   save();
@@ -1830,7 +2099,7 @@ function viewHome(){
   }).join('');
   const has=parseNames(DB.libre).length>0;
   return banner()+'<main class="home">'+identity()+'<div class="cards">'+cards+'</div>'+
-  '<section class="libre" aria-labelledby="libreh"><h2 class="h2" id="libreh">Libre</h2><p class="muted">Escribe un nombre por línea. Esos son los que van a salir.</p><textarea id="libre" class="ta" rows="5" placeholder="Ana Pérez&#10;Luis Gómez" aria-label="Nombres, uno por línea">'+esc(DB.libre)+'</textarea><button type="button" class="btn gold xl" id="libreGo" data-act="libre-start"'+(has?'':' disabled')+'>Empezar</button></section><p class="foot"><button type="button" class="linkbtn" data-act="backup">Respaldo de datos</button>'+gChip()+'</p></main>';
+  '<section class="libre" aria-labelledby="libreh"><h2 class="h2" id="libreh">Libre</h2><p class="muted">Escribe un nombre por línea. Esos son los que van a salir.</p><textarea id="libre" class="ta" rows="5" placeholder="Ana Pérez&#10;Luis Gómez" aria-label="Nombres, uno por línea">'+esc(DB.libre)+'</textarea><button type="button" class="btn gold xl" id="libreGo" data-act="libre-start"'+(has?'':' disabled')+'>Empezar</button></section><p class="foot"><button type="button" class="linkbtn" data-act="backup">Respaldo de datos</button><button type="button" class="linkbtn" data-act="music" aria-pressed="'+(DB.prefs.music!==false)+'">Música: '+(DB.prefs.music!==false?'sí':'no')+'</button>'+gChip()+'</p></main>';
 }
 function viewLock(){
   const c=CLASSES.find(x=>x.id===S.lockId);
@@ -1864,7 +2133,7 @@ function viewSetup(){
   const c=S.course,list=presentOf(c),cf=S.cfg,tabs=DB.prefs.tables,saved=DB.tour[c.id]&&DB.tour[c.id].v===2?DB.tour[c.id]:null;
   let h='<main class="narrow"><div class="hd"><div><p class="eyebrow">'+esc(c.name)+'</p><h1 class="h1m">Cómo jugamos</h1></div><div style="display:flex;gap:8px;flex-wrap:wrap">'+(c.id!=='libre'?'<button type="button" class="btn sm" data-act="edit-class">Editar lista</button>':'')+'<button type="button" class="btn sm" data-act="home">Volver</button></div></div>';
   if(saved)h+='<div class="saved"><span>Hay un torneo guardado de este curso.</span><div><button type="button" class="btn sm gold" data-act="resume-tour">Seguir</button><button type="button" class="btn sm" data-act="discard-tour">Descartar</button></div></div>';
-  h+='<div class="tools"><button type="button" class="btn sm" data-act="stats-setup">Estadísticas</button><button type="button" class="btn sm" data-act="hall">Salón de campeones</button></div>'+absHtml(c);
+  h+='<div class="tools"><button type="button" class="btn sm" data-act="stats-setup">Estadísticas</button><button type="button" class="btn sm" data-act="hall">Salón de campeones</button>'+musBtn().replace('class="btn sm"','class="btn sm" style="grid-column:1/-1"')+'</div>'+absHtml(c);
   const opm=DB.prefs.op||'mul';
   h+='<div class="sec"><span class="lab">Operación</span></div><div class="ops">'+[['mul','Multiplicar'],['fac','Factor faltante'],['div','Dividir'],['tab','Tablas completas'],['add','Sumar'],['sub','Restar'],['mix','Sumar y restar'],['all','Todas combinadas']].map(o=>'<button type="button" class="seg '+(opm===o[0]?'on':'')+'" data-act="op" data-v="'+o[0]+'" aria-pressed="'+(opm===o[0])+'">'+o[1]+'</button>').join('')+'</div>';
   if(usesTables(opm))h+='<div class="sec"><span class="lab">Tablas</span><div style="display:flex;gap:6px"><button type="button" class="btn sm" data-act="tbl-all">Todas</button><button type="button" class="btn sm" data-act="tbl-none">Ninguna</button></div></div><div class="chips">'+
@@ -1901,7 +2170,7 @@ function viewSetup(){
   return h;
 }
 function topBar(left){
-  return '<div class="top"><div class="l"><p class="eyebrow">'+esc(S.course.name)+'</p><div class="lt">'+left+'</div></div><div class="clk"><small>Llevamos</small><b id="clk">'+clock((Date.now()-S.t0)/1000)+'</b></div><div class="r"><button type="button" class="btn sm back" data-act="back-setup">'+(S.confirmBack?'¿Seguro? Toca otra vez':'← Volver')+'</button><button type="button" class="btn sm" data-act="mute">'+(DB.prefs.mute?'Activar sonido':'Silencio')+'</button><button type="button" class="btn sm" data-act="stats">Estadísticas</button><button type="button" class="btn sm" data-act="home">Cambiar curso</button></div></div>';
+  return '<div class="top"><div class="l"><p class="eyebrow">'+esc(S.course.name)+'</p><div class="lt">'+left+'</div></div><div class="clk"><small>Llevamos</small><b id="clk">'+clock((Date.now()-S.t0)/1000)+'</b></div><div class="r"><button type="button" class="btn sm back" data-act="back-setup">'+(S.confirmBack?'¿Seguro? Toca otra vez':'← Volver')+'</button>'+(G&&G.kind==='boss'?musBtn():'')+'<button type="button" class="btn sm" data-act="mute">'+(DB.prefs.mute?'Activar sonido':'Silencio')+'</button><button type="button" class="btn sm" data-act="stats">Estadísticas</button><button type="button" class="btn sm" data-act="home">Cambiar curso</button></div></div>';
 }
 function histHtml(){
   const c=S.course,all=histOf(c),h=all.slice(-60).reverse(),rp=repOf(c).length;
@@ -2110,7 +2379,7 @@ function viewBracket(){
   }
   const btn=done?'<div class="goto top"><button type="button" class="btn gold xl" data-act="to-setup">Nuevo torneo</button><button type="button" class="btn xl" data-act="hall">Salón de campeones</button></div>':'';
   const tag=!done&&M[cur].br==='L'?' · ronda de no ganadores':'';
-  return '<div class="tourp"><div class="top3"><div><p class="eyebrow">Torneo'+tag+'</p><h1 class="h1m" style="margin-bottom:12px">'+(done?'Cuadro':mTitle(M[cur]))+'</h1></div><div class="r"><button type="button" class="btn sm back" data-act="bracket-back">'+(S.fromDuel?'← Volver al duelo':'← Volver')+'</button><button type="button" class="btn sm" data-act="mute">'+(DB.prefs.mute?'Activar sonido':'Silencio')+'</button>'+(done?'':'<button type="button" class="btn sm" data-act="save-exit">Guardar y salir</button>')+'<button type="button" class="btn sm" data-act="home">Cambiar curso</button></div></div>'+pod+(done?placesHtml():'')+btn+bracketHtml()+'</div>';
+  return '<div class="tourp"><div class="top3"><div><p class="eyebrow">Torneo'+tag+'</p><h1 class="h1m" style="margin-bottom:12px">'+(done?'Cuadro':mTitle(M[cur]))+'</h1></div><div class="r"><button type="button" class="btn sm back" data-act="bracket-back">'+(S.fromDuel?'← Volver al duelo':'← Volver')+'</button>'+musBtn()+'<button type="button" class="btn sm" data-act="mute">'+(DB.prefs.mute?'Activar sonido':'Silencio')+'</button>'+(done?'':'<button type="button" class="btn sm" data-act="save-exit">Guardar y salir</button>')+'<button type="button" class="btn sm" data-act="home">Cambiar curso</button></div></div>'+pod+(done?placesHtml():'')+btn+bracketHtml()+'</div>';
 }
 const pcard=(e,side,sc)=>'<div class="pc" style="--tc:'+ecol(e,side)+'"><div><small>'+esc(e.n)+'</small><b>'+sc+'</b></div><button type="button" class="btn sm minus" data-act="minus" data-side="'+side+'"'+(sc>0?'':' disabled')+' aria-label="Quitar un punto a '+esc(e.n)+'">−1</button></div>';
 function viewDuel(){
@@ -2158,6 +2427,7 @@ function render(){
   const finished=(s==='play'&&S.view==='play'&&G&&G.phase==='end'&&(G.kind!=='boss'||G.won))||(s==='bracket'&&TR&&TR.cur===null);
   if(NAVIDAD)document.body.classList.toggle('nv-snow',s==='home'||!!finished);
   if(finished)confetti();
+  try{MUS.sync()}catch(e){}
 }
 function leave(){
   clearLater();timerStop();bossStop();
@@ -2247,6 +2517,7 @@ function act(a,d){
       S.repId=null;repeatMatch(id);break;
     }
     case 'mute':DB.prefs.mute=!DB.prefs.mute;save();render();break;
+    case 'music':DB.prefs.music=DB.prefs.music===false;save();render();break;
     case 'bien':if(G.kind==='ind')indMark(true);else if(G.kind==='boss')bossMark(true);else tmMark(true);break;
     case 'mal':if(G.kind==='ind')indMark(false);else if(G.kind==='boss')bossMark(false);else tmMark(false);break;
     case 'reveal':if(G.kind==='boss')bossReveal();else indReveal();break;
